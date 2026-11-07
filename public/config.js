@@ -6,5 +6,6 @@ window.CS_CONFIG = {
     projectId: "YOUR-PROJECT",
     appId: "ใส่ค่าจาก Firebase"
   },
+  lineOA: "@cs2016",          /* LINE OA ของร้าน */
   region: "asia-southeast1"   /* ต้องตรงกับ region ของ functions (ดู functions/index.js) */
 };
