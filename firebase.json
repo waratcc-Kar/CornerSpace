@@ -1,0 +1,9 @@
+{
+  "hosting": {
+    "public": "public",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "/line-webhook", "function": { "functionId": "lineWebhook", "region": "asia-southeast1" } }]
+  },
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },
+  "functions": [{ "source": "functions", "codebase": "default", "runtime": "nodejs20" }]
+}

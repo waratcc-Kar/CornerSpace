@@ -1,4 +1,4 @@
-<title>Corner Space รับรถ</title>
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b0b0b"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style></head><body><title>Corner Space รับรถ</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap">
 <style>
@@ -421,6 +421,12 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
 <div id="zoom" hidden><img alt="รูปสภาพรถ"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
+<script src="config.js"></script>
+<script src="shim.js"></script>
 <script>
 (function(){
 "use strict";
@@ -1421,6 +1427,12 @@ function resetForm(){
 }
 
 /* ---------- queue ---------- */
+function linePush(phone,text){
+  if(!window.csLine){toast("ยังไม่ได้เชื่อม LINE");return}
+  if(!phone){toast("ไม่มีเบอร์โทรลูกค้า");return}
+  toast("กำลังส่ง...");
+  window.csLine.push(phone,text).then(function(r){toast(r&&r.sent?"ส่งเข้า LINE ลูกค้าแล้ว":"ลูกค้ายังไม่ได้ผูก LINE กับร้าน (ให้ลูกค้าพิมพ์เบอร์โทรในแชท LINE OA) ใช้ปุ่มคัดลอกแทนได้")}).catch(function(){toast("ส่ง LINE ไม่สำเร็จ ลองใหม่หรือใช้ปุ่มคัดลอก")});
+}
 function lineSummary(j){
   var rows=["Corner Space · ใบรับรถ "+j.no,"ทะเบียน "+j.plate+" · "+j.car+(j.kind==="moto"&&j.cc?" "+j.cc+" cc":"")+(j.color?" ("+j.color+")":"")];
   if(j.name)rows.push("ลูกค้า "+j.name+(j.member?" (สมาชิก)":""));
@@ -1490,7 +1502,7 @@ function renderQueue(){
       (j.status==="done"?(S.payOpen===j.id?'<button class="btn primary sm" data-act="next">ยืนยันชำระเงินและส่งมอบ</button><button class="btn ghost sm" data-act="payclose">ปิด</button>':'<button class="btn primary sm" data-act="payopen">ชำระเงิน</button>'):(st[2]?'<button class="btn primary sm" data-act="next">'+st[2]+"</button>":""))+
       (si>0&&j.status!=="delivered"?'<button class="btn ghost sm" data-act="back">ย้อนสถานะ</button>':"")+
       (j.status!=="delivered"&&S.editJob!==j.id?'<button class="btn ghost sm" data-act="edit">แก้ไข</button>':"")+
-      '<button class="btn ghost sm" data-act="copy">คัดลอกส่ง LINE</button></div>'+
+      '<button class="btn ghost sm" data-act="copy">คัดลอกส่ง LINE</button>'+(window.csLine?'<button class="btn ghost sm" data-act="push">ส่งเข้า LINE ลูกค้า</button>':"")+'</div>'+
       (S.showText===j.id?'<textarea class="in copybox" readonly>'+esc(lineSummary(j))+"</textarea>":"")+"</article>";
   }).join("");
   if(S.showText){var ta=$(".copybox");if(ta){ta.focus();ta.select()}}
@@ -1584,6 +1596,7 @@ function jobAct(id,act){
     p=updJob(id,{status:"delivered",pay:{cash:d.cash.on?Number(d.cash.amt)||0:0,scan:d.scan.on?Number(d.scan.amt)||0:0,paidAt:Date.now()}});
   }else if(act==="next"&&si<STATUS.length-1){var ns=STATUS[si+1][0];p=updJob(id,ns==="done"?{status:ns,doneAt:Date.now()}:{status:ns})}
   else if(act==="back"&&si>0){var bs=STATUS[si-1][0];p=updJob(id,j.status==="done"?{status:bs,doneAt:null}:{status:bs})}
+  else if(act==="push"){linePush(j.phone,lineSummary(j));return}
   else if(act==="copy"){
     var txt=lineSummary(j);
     var done=function(){toast("คัดลอกแล้ว วางในแชท LINE ได้เลย")};
@@ -1749,7 +1762,7 @@ function renderService(){
     var m=e.m,bk2=bookingOf(m.id,mi);
     return '<article class="job" data-cid="'+esc(m.id)+'"><div class="jh"><div><div class="plate">'+esc(m.n||"(ไม่มีชื่อ)")+'</div><div>'+esc([m.p,m.c,m.plate].filter(Boolean).join(" · "))+'</div></div>'+(e.done?'<span class="pill done">รับบริการแล้ว ✓</span>':bk2?'<span class="pill done">นัดแล้ว '+dstr(new Date(bk2.date+"T12:00:00").getTime())+"</span>":'<span class="pill working">ยังไม่ได้นัด</span>')+'</div><div style="margin-top:8px">'+histChips(e.its)+'</div><div class="acts">'+
       (e.done?"":(bk2?'<button type="button" class="btn ghost sm" data-sa="unbook" data-d="'+bk2.date+'">'+(S.bookDel===bk2.date?"ยืนยันยกเลิกนัด":"ยกเลิกนัด")+"</button>":'<button type="button" class="btn primary sm" data-sa="book">จองวัน</button>')+'<button type="button" class="btn ghost sm" data-sa="done">บันทึกว่ามารับบริการแล้ว</button>')+
-      '<button type="button" class="btn ghost sm" data-sa="copy">คัดลอกข้อความ LINE</button></div>'+
+      '<button type="button" class="btn ghost sm" data-sa="copy">คัดลอกข้อความ LINE</button>'+(window.csLine?'<button type="button" class="btn ghost sm" data-sa="push">ส่งเข้า LINE ลูกค้า</button>':"")+'</div>'+
       (S.svcText===m.id?'<textarea class="in copybox" readonly>'+esc(svcMsg(m,e.its,mi,bk2))+"</textarea>":"")+"</article>";
   }).join(""):'<p class="empty">'+(mi<mIdx(Date.now())?"เดือนที่ผ่านมาแล้ว":"ไม่มีลูกค้าถึงรอบบริการในเดือนนี้")+"</p>";
   var bl=S.bookings.filter(function(b){return mIdx(new Date(b.date+"T12:00:00"))===mi}).sort(function(a,b){return a.date<b.date?-1:1});
@@ -1774,6 +1787,10 @@ function svcAct(btn){
     S.bookDel="";store.deleteBooking(d).catch(function(){toast("ยกเลิกนัดไม่สำเร็จ ลองอีกครั้ง")});return;
   }
   if(act==="done"){markDone(card.dataset.cid,mi);return}
+  if(act==="push"){
+    var pm=S.customers.filter(function(c){return c.id===card.dataset.cid})[0],pe=dueFor(mi).filter(function(x){return x.m.id===pm.id})[0];
+    linePush(pm.p,svcMsg(pm,pe?pe.its:[],mi,bookingOf(pm.id,mi)));return
+  }
   if(act==="copy"){
     var m=S.customers.filter(function(c){return c.id===card.dataset.cid})[0],e=dueFor(mi).filter(function(x){return x.m.id===m.id})[0];
     var txt=svcMsg(m,e?e.its:[],mi,bookingOf(m.id,mi));
@@ -1787,7 +1804,8 @@ function bookDay(ds){
   if(!e){toast("ลูกค้ารายนี้ไม่ถึงรอบบริการในเดือนนี้");return}
   var b={date:ds,cid:m.id,plate:m.plate||"",name:m.n||"",phone:m.p||"",car:m.c||"",prog:e.its.map(function(i){return i.name}).join(", "),createdAt:Date.now()};
   S.bookFor="";
-  store.saveBooking(b).then(function(){toast("จองวันที่ "+dstr(new Date(ds+"T12:00:00").getTime())+" แล้ว")})
+  store.saveBooking(b).then(function(){toast("จองวันที่ "+dstr(new Date(ds+"T12:00:00").getTime())+" แล้ว");
+    if(window.csLine&&b.phone)window.csLine.push(b.phone,"Corner Space ยืนยันนัดบริการ Re-Coat\nรถ "+[b.plate,b.car].filter(Boolean).join(" ")+"\nวันที่ "+dstr(new Date(ds+"T12:00:00").getTime())+"\nร้านจะแจ้งเตือนอีกครั้งก่อนวันนัด 1 วัน").catch(function(){})})
    .catch(function(err){toast(err&&err.code==="taken"?"วันนี้มีรถนัดแล้ว รับวันละ 1 คัน เลือกวันอื่น":"จองไม่สำเร็จ ลองอีกครั้ง")});
   renderService();
 }
@@ -2145,3 +2163,4 @@ function fdRestore(){
 })();
 })();
 </script>
+</body></html>
