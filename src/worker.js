@@ -386,7 +386,7 @@ async function makeDraft(env, uid) {
 
 /* ---------------- ตอบลูกค้าอัตโนมัติ (เฉพาะเรื่องที่ AI มั่นใจและไม่เสี่ยง) ---------------- */
 const HOLD_TEXT = "รับเรื่องแล้วครับ ทีมงานจะรีบตอบกลับโดยเร็วที่สุด\nเวลาทำการ จันทร์–เสาร์ 08:00–17:30 ครับ";
-const AUTO_PER_HOUR = 12;
+const AUTO_PER_HOUR = 30;
 
 /* ข้อความยาวแยกเป็นหลายบับเบิลตามย่อหน้า (สูงสุด 4) ให้อ่านเหมือนคนพิมพ์ทีละท่อน */
 function splitBubbles(text) {
@@ -434,7 +434,10 @@ async function handleChat(env, uid, replyToken, kind) {
   const pz = await env.DB.prepare("SELECT until FROM chat_pause WHERE user_id = ?1").bind(uid).first();
   if (pz && pz.until > now) return;
   const cnt = (await env.DB.prepare("SELECT count(*) AS n FROM chat_msgs WHERE user_id = ?1 AND dir IN ('auto','hold') AND ts > ?2").bind(uid, now - 3600e3).first()).n;
-  if (cnt >= AUTO_PER_HOUR) return;
+  if (cnt >= AUTO_PER_HOUR) {
+    await env.DB.prepare("UPDATE chat_threads SET draft_flag = 1, draft_reason = ?2 WHERE user_id = ?1").bind(uid, "ตอบอัตโนมัติถึงเพดานต่อชั่วโมงแล้ว ให้ทีมงานดูต่อ").run();
+    return;
+  }
   /* ลูกค้าทักมารอบใหม่ (ร้าน/AI ยังไม่ได้ตอบใน 30 นาที) ต้องขึ้นต้นด้วย สวัสดีครับ เสมอ ไม่ว่าลูกค้าจะทักอะไรมา */
   const lastOut = await env.DB.prepare("SELECT max(ts) AS ts FROM chat_msgs WHERE user_id = ?1 AND dir IN ('auto','hold','out') AND ts <= ?2").bind(uid, d.ts || now).first();
   const newRound = !lastOut || !lastOut.ts || (d.ts || now) - lastOut.ts >= NEW_ROUND_MS;
