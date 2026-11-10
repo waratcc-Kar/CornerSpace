@@ -380,7 +380,7 @@ async function makeDraft(env, uid) {
   /* ถ้าระหว่างรอ AI ลูกค้าพิมพ์ข้อความใหม่ ร่างนี้เก่าแล้ว ทิ้ง */
   const res = await env.DB.prepare("UPDATE chat_threads SET draft = ?2, draft_flag = ?3, draft_reason = ?4, draft_for = ?5 WHERE user_id = ?1 AND (SELECT max(id) FROM chat_msgs WHERE user_id = ?1) = ?5")
     .bind(uid, reply, flag, reason, lastId).run();
-  return { ok: true, draft: reply, flag: !!flag, followup: !!(j && j.staff_followup && !j.needs_staff), reason, stale: !(res.meta && res.meta.changes) };
+  return { ok: true, ts: rows[rows.length - 1].ts, draft: reply, flag: !!flag, followup: !!(j && j.staff_followup && !j.needs_staff), reason, stale: !(res.meta && res.meta.changes) };
 }
 
 
@@ -424,23 +424,35 @@ async function autoEnabled(env) {
   return !(cfg && cfg.auto === false);
 }
 
+const NEW_ROUND_MS = 30 * 60e3;
+
 async function handleChat(env, uid, replyToken, kind) {
   const d = await makeDraft(env, uid);
   if (!d.ok || d.stale) return;
   if (!env.LINE_CHANNEL_ACCESS_TOKEN || !(await autoEnabled(env))) return;
-  if (kind === "sticker") return;
   const now = Date.now();
   const pz = await env.DB.prepare("SELECT until FROM chat_pause WHERE user_id = ?1").bind(uid).first();
   if (pz && pz.until > now) return;
   const cnt = (await env.DB.prepare("SELECT count(*) AS n FROM chat_msgs WHERE user_id = ?1 AND dir IN ('auto','hold') AND ts > ?2").bind(uid, now - 3600e3).first()).n;
   if (cnt >= AUTO_PER_HOUR) return;
+  /* ลูกค้าทักมารอบใหม่ (ร้าน/AI ยังไม่ได้ตอบใน 30 นาที) ต้องขึ้นต้นด้วย สวัสดีครับ เสมอ ไม่ว่าลูกค้าจะทักอะไรมา */
+  const lastOut = await env.DB.prepare("SELECT max(ts) AS ts FROM chat_msgs WHERE user_id = ?1 AND dir IN ('auto','hold','out') AND ts < ?2").bind(uid, d.ts || now).first();
+  const newRound = !lastOut || !lastOut.ts || (d.ts || now) - lastOut.ts >= NEW_ROUND_MS;
+  const greet = (t) => (newRound && !/^\s*สวัสดี/.test(t) ? "สวัสดีครับ " + t : t);
+  if (kind === "sticker") {
+    if (!newRound) return;
+    const gt = "สวัสดีครับ มีอะไรให้ทางร้านช่วยดูแลรถไหมครับ";
+    try { await lineReplyOrPush(env, replyToken, uid, gt); } catch (e) { console.error("auto reply failed", e); return; }
+    await env.DB.prepare("INSERT INTO chat_msgs (user_id, dir, text, ts) VALUES (?1, 'auto', ?2, ?3)").bind(uid, gt, Date.now()).run();
+    return;
+  }
   const safe = kind === "text" && !d.flag && d.draft;
-  let text = d.draft;
+  let text = safe ? greet(d.draft) : d.draft;
   if (!safe) {
     /* ต้องให้พนักงานดู: ส่งข้อความรอสั้นๆ ครั้งเดียวต่อ 10 นาที แล้วปล่อยให้พนักงานตอบต่อ */
     const recent = await env.DB.prepare("SELECT count(*) AS n FROM chat_msgs WHERE user_id = ?1 AND dir = 'hold' AND ts > ?2").bind(uid, now - 600e3).first();
     if (recent.n > 0) return;
-    text = HOLD_TEXT;
+    text = greet(HOLD_TEXT);
   }
   try { await lineReplyOrPush(env, replyToken, uid, text); } catch (e) { console.error("auto reply failed", e); return; }
   await env.DB.prepare("INSERT INTO chat_msgs (user_id, dir, text, ts) VALUES (?1, ?4, ?2, ?3)").bind(uid, text.slice(0, 4900), Date.now(), safe ? "auto" : "hold").run();
