@@ -23,7 +23,7 @@
         if (!r.ok) {
           var code = (j && j.error) || (r.status === 401 || r.status === 403 ? "unauthenticated" : "error");
           if (r.status === 429) code = "rate_limited";
-          throw { code: code, status: r.status, message: j && j.message, diag: j && j.jwtHeader !== undefined ? "jwt=" + (j.jwtHeader ? 1 : 0) + " cookie=" + (j.accessCookie ? 1 : 0) + " host=" + j.host : "" };
+          throw { code: code, status: r.status, message: j && j.message, diag: j && j.jwtHeader !== undefined ? "jwt=" + (j.jwtHeader ? 1 : 0) + " cookie=" + (j.accessCookie ? 1 : 0) + " host=" + j.host + (j.why ? " why=" + j.why : "") : "" };
         }
         return j;
       });

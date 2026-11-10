@@ -107,7 +107,7 @@ async function getKey(env, kid) {
   return keys[kid] || null;
 }
 
-/* คืน {email, owner} | {error} | null (ไม่ได้ล็อกอิน) */
+/* คืน {email, owner} | {error} | {bad:"เหตุผล"} (บัตรไม่ผ่าน) | null (ไม่มีบัตร) */
 async function authUser(req, env) {
   if (!teamHost(env) || !env.ACCESS_AUD) return { error: "not_configured" };
   const tok = req.headers.get("cf-access-jwt-assertion");
@@ -116,22 +116,23 @@ async function authUser(req, env) {
     const [h, p, s] = tok.split(".");
     const head = JSON.parse(new TextDecoder().decode(b64u(h)));
     const pay = JSON.parse(new TextDecoder().decode(b64u(p)));
-    if (head.alg !== "RS256") return null;
+    if (head.alg !== "RS256") return { bad: "alg=" + head.alg };
     const key = await getKey(env, head.kid);
-    if (!key) return null;
+    if (!key) return { bad: "no_key_for_kid" };
     const ok = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, b64u(s), new TextEncoder().encode(h + "." + p));
-    if (!ok) return null;
+    if (!ok) return { bad: "bad_signature" };
     const aud = Array.isArray(pay.aud) ? pay.aud : [pay.aud];
-    if (!aud.includes(env.ACCESS_AUD)) return null;
-    if (!pay.exp || pay.exp * 1000 < Date.now()) return null;
-    if (pay.iss !== "https://" + teamHost(env)) return null;
+    const want = String(env.ACCESS_AUD).trim();
+    if (!aud.includes(want)) return { bad: "aud_mismatch token=" + String(aud[0]).slice(0, 6) + "(" + String(aud[0]).length + ") set=" + want.slice(0, 6) + "(" + want.length + ")" };
+    if (!pay.exp || pay.exp * 1000 < Date.now()) return { bad: "expired" };
+    if (pay.iss !== "https://" + teamHost(env)) return { bad: "iss_mismatch token=" + pay.iss + " set=" + teamHost(env) };
     const email = String(pay.email || "").toLowerCase();
-    if (!email) return null;
+    if (!email) return { bad: "no_email" };
     const owners = list(env.OWNER_EMAILS), staff = list(env.STAFF_EMAILS);
     const owner = owners.includes(email);
     if (staff.length && !owner && !staff.includes(email)) return { error: "forbidden" };
     return { email, owner };
-  } catch (e) { return null; }
+  } catch (e) { return { bad: "exception " + String(e && e.message || e).slice(0, 80) }; }
 }
 
 /* ---------------- API ---------------- */
@@ -143,6 +144,10 @@ async function readJson(req, max = 14_000_000) {
 
 async function api(req, env, url) {
   const u = await authUser(req, env);
+  if (u && u.bad) {
+    const cookie = req.headers.get("cookie") || "";
+    return json({ error: "unauthenticated", message: "ต้องล็อกอิน", jwtHeader: true, accessCookie: /CF_Authorization=/.test(cookie), host: url.host, why: u.bad }, 401);
+  }
   if (u && u.error === "not_configured") return fail(503, "not_configured", "ยังไม่ได้ตั้งค่า Cloudflare Access (ACCESS_TEAM_DOMAIN / ACCESS_AUD) ดูคู่มือ SETUP-CLOUDFLARE.md");
   if (u && u.error === "forbidden") return fail(403, "forbidden", "อีเมลนี้ยังไม่ได้รับสิทธิ์");
   if (!u) {
