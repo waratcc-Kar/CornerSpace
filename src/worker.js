@@ -387,7 +387,7 @@ async function makeDraft(env, uid, img) {
 
 
 /* ---------------- ตอบลูกค้าอัตโนมัติ (เฉพาะเรื่องที่ AI มั่นใจและไม่เสี่ยง) ---------------- */
-const HOLD_TEXT = "รับเรื่องแล้วครับ ทีมงานจะรีบตอบกลับโดยเร็วที่สุด\nเวลาทำการ จันทร์–เสาร์ 08:00–17:30 ครับ";
+const HOLD_TEXT = "ขอเช็กรายละเอียดให้สักครู่นะครับ เดี๋ยวรีบตอบกลับครับ";
 const AUTO_PER_HOUR = 30;
 
 /* ข้อความยาวแยกเป็นหลายบับเบิลตามย่อหน้า (สูงสุด 4) ให้อ่านเหมือนคนพิมพ์ทีละท่อน */
@@ -427,6 +427,19 @@ async function autoEnabled(env) {
 }
 
 const NEW_ROUND_MS = 30 * 60e3;
+
+/* แจ้งเจ้าของร้านทาง LINE เมื่อ AI ตอบเองไม่ได้/ต้องมีคนดูต่อ (ตั้ง settings/ai.notify = [LINE userId]) */
+async function notifyOwner(env, uid, why) {
+  try {
+    const cfg = await getDoc(env, "settings", "ai");
+    const ids = (cfg && Array.isArray(cfg.notify) ? cfg.notify : []).filter((x) => UID_RE.test(String(x)) && x !== uid).slice(0, 5);
+    if (!ids.length) return;
+    const th = await env.DB.prepare("SELECT name FROM chat_threads WHERE user_id = ?1").bind(uid).first();
+    const last = await env.DB.prepare("SELECT text FROM chat_msgs WHERE user_id = ?1 AND dir = 'in' ORDER BY id DESC LIMIT 1").bind(uid).first();
+    const msg = "🔔 ลูกค้าต้องให้ดูเอง\nชื่อ: " + ((th && th.name) || "ลูกค้า") + "\nถามว่า: " + String((last && last.text) || "").slice(0, 200) + "\nเหตุผล: " + String(why || "AI ไม่แน่ใจ").slice(0, 200) + "\nเปิดดูและตอบ: https://karnet.org";
+    for (const id of ids) { try { await linePush(env, id, msg); } catch (e) { console.error("notify owner failed", e); } }
+  } catch (e) { console.error("notify owner failed", e); }
+}
 
 async function fetchLineImage(env, id) {
   try {
@@ -477,9 +490,11 @@ async function handleChat(env, uid, replyToken, kind, msgId) {
     const recent = await env.DB.prepare("SELECT count(*) AS n FROM chat_msgs WHERE user_id = ?1 AND dir = 'hold' AND ts > ?2").bind(uid, now - 600e3).first();
     if (recent.n > 0) return;
     text = greet(HOLD_TEXT);
+    await notifyOwner(env, uid, d.reason);
   }
   try { await lineReplyOrPush(env, replyToken, uid, text); } catch (e) { console.error("auto reply failed", e); return; }
   await env.DB.prepare("INSERT INTO chat_msgs (user_id, dir, text, ts) VALUES (?1, ?4, ?2, ?3)").bind(uid, text.slice(0, 4900), Date.now(), safe ? "auto" : "hold").run();
+  if (safe && d.followup) await notifyOwner(env, uid, d.reason || "ลูกค้าขอคิว/นัดหมาย");
   if (safe && d.followup) {
     /* AI ตอบลูกค้าไปแล้ว แต่เรื่องนี้ (เช่น ขอคิว) ต้องให้พนักงานรับช่วงต่อ: คงสถานะ ต้องดูเอง ไว้ */
     await env.DB.prepare("UPDATE chat_threads SET draft = '', draft_flag = 1, draft_reason = ?4, unread = CASE WHEN unread > 0 THEN unread ELSE 1 END, last_text = ?2, last_ts = ?3 WHERE user_id = ?1").bind(uid, ("AI: " + text).slice(0, 200), Date.now(), (d.reason || "ลูกค้าขอคิว/นัดหมาย ให้พนักงานเช็กคิวและยืนยัน").slice(0, 300)).run();
