@@ -132,7 +132,7 @@ async function authUser(req, env) {
     const owner = owners.includes(email);
     if (staff.length && !owner && !staff.includes(email)) return { error: "forbidden" };
     return { email, owner };
-  } catch (e) { return { bad: "exception " + String(e && e.message || e).slice(0, 80) }; }
+  } catch (e) { return { bad: "exception " + String(e && e.message || e).slice(0, 80) + " team=" + teamHost(env) }; }
 }
 
 /* ---------------- API ---------------- */
