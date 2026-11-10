@@ -912,7 +912,11 @@ function custAct(el){
     var c=Object.assign({},S.customers.filter(function(x){return x.id===id})[0]||{},{id:id});$$("[data-k]",card).forEach(function(i){c[i.dataset.k]=i.value.trim()});
     if(!c.n&&!c.p&&!c.plate){toast("ใส่ชื่อ เบอร์ หรือทะเบียนอย่างน้อย 1 อย่าง");return}
     S.custEdit="";
-    store.saveCustomer(c).then(function(){toast("บันทึกข้อมูลลูกค้าแล้ว")}).catch(function(e){toast(e&&e.code==="invalid_argument"?"บัญชีนี้แก้ไขข้อมูลไม่ได้":"บันทึกไม่สำเร็จ ลองอีกครั้ง")});
+    var old=S.customers.filter(function(x){return x.id===id})[0],moved=0;
+    if(old&&old.plate&&norm(old.plate)!==norm(c.plate)){
+      S.jobs.filter(function(j){return norm(j.plate)===norm(old.plate)}).forEach(function(j){moved++;store.updateJob(j.id,{plate:c.plate}).catch(function(){})});
+    }
+    store.saveCustomer(c).then(function(){toast(moved?"บันทึกแล้ว และเปลี่ยนทะเบียนในใบรับรถเดิม "+moved+" ใบ":"บันทึกข้อมูลลูกค้าแล้ว")}).catch(function(e){toast(e&&e.code==="invalid_argument"?"บัญชีนี้แก้ไขข้อมูลไม่ได้":"บันทึกไม่สำเร็จ ลองอีกครั้ง")});
     renderCustomers();
   }
 }
