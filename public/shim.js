@@ -215,6 +215,9 @@
     }
   };
 
+  /* เรียก API ของ Worker โดยตรง (ใช้กับแท็บแชต) */
+  window.csApi = function (method, path, body) { return ready.then(function () { return call(method, path, body); }); };
+
   /* ---- LINE: ส่งข้อความเข้า LINE ของลูกค้าผ่าน Worker ---- */
   window.csLine = {
     push: function (phone, text) {

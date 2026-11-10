@@ -160,6 +160,15 @@ textarea.in{min-height:76px;resize:vertical}
 .btn.ghost{background:transparent;border-color:var(--line);color:var(--ink)}
 .btn.sm{min-height:38px;padding:0 16px;font-size:.9rem}
 .btn:disabled{opacity:.5;cursor:not-allowed}
+.chatrow{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border:2px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);cursor:pointer}
+.chatrow.un{border-color:var(--yellow)}
+.chatrow .cm{min-width:0;flex:1}.chatrow .cn{font-weight:600}.chatrow .ct2{color:var(--muted);font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chatrow .tg{font-size:.75rem;border-radius:999px;padding:1px 9px;white-space:nowrap;background:var(--ok-bg);color:var(--ok-ink)}
+.chatrow .tg.w{background:var(--yellow);color:var(--yellow-ink)}
+.bub{max-width:86%;padding:8px 12px;border-radius:14px;margin:6px 0;white-space:pre-wrap;word-break:break-word;border:1px solid var(--line);background:var(--card)}
+.bub.out{margin-left:auto;background:var(--ok-bg);color:var(--ok-ink);border-color:transparent}
+.bub small{display:block;color:var(--muted);font-size:.72rem;margin-top:2px}.bub.out small{color:inherit;opacity:.7}
+.chatwarn{background:var(--yellow);color:var(--yellow-ink);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:.9rem}
 .btn.danger{background:transparent;border-color:var(--danger);color:var(--danger)}
 
 .filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
@@ -251,6 +260,7 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
       <button class="tab" role="tab" data-tab="intake">รับรถ</button>
       <button class="tab" role="tab" data-tab="queue">คิวงาน<span class="count" id="qcount"></span></button>
       <button class="tab" role="tab" data-tab="service">นัดบริการ<span class="count" id="scount"></span></button>
+      <button class="tab" role="tab" data-tab="chat" id="chatTab" hidden>แชต<span class="count" id="ccount"></span></button>
       <button class="tab" role="tab" data-tab="customers">ลูกค้า</button>
       <button class="tab" role="tab" data-tab="prices">ราคาและไซส์</button>
     </nav>
@@ -376,6 +386,10 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
     <div id="dueList"></div>
     <h2>นัดในเดือนนี้</h2>
     <div id="bookList"></div>
+  </section>
+
+  <section id="v-chat" hidden>
+    <div id="chatBox"></div>
   </section>
 
   <section id="v-customers" hidden>
@@ -653,13 +667,97 @@ function totals(){
 var toastT;
 function toast(msg){var t=$("#toast");t.textContent=msg;t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove("show")},3200)}
 
+
+/* ---------- แชต LINE + ผู้ช่วยร่างคำตอบ ---------- */
+var CH={list:[],open:null,thread:null,msgs:[],lastId:0,timer:null,busy:false};
+function chApi(m,p,b){return window.csApi?window.csApi(m,p,b):Promise.reject({code:"unsupported"})}
+function chTime(ts){try{return new Date(ts).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}catch(e){return ""}}
+function chBadge(n){var b=$("#ccount");if(b)b.textContent=n?String(n):""}
+function chPoll(){
+  if(!window.csApi||document.hidden)return;
+  chApi("GET","/api/chats").then(function(r){
+    CH.list=r.threads||[];chBadge(r.pending||0);
+    if(S.tab==="chat"&&!CH.open)renderChat();
+  }).catch(function(){});
+}
+function renderChat(){
+  var box=$("#chatBox");if(!box)return;
+  if(CH.open)return renderChatOpen(box);
+  var h='<p class="hint" style="margin:0 0 10px">ข้อความที่ลูกค้าทักเข้า LINE @cs2016 AI จะร่างคำตอบให้ พนักงานตรวจแล้วกดส่ง (ยังไม่ส่งอัตโนมัติ) · คำตอบที่ตอบจากแอป LINE OA Manager โดยตรงจะไม่แสดงที่นี่</p>';
+  if(!CH.list.length)h+='<p class="empty">ยังไม่มีแชตลูกค้า</p>';
+  h+=CH.list.map(function(t){
+    var tag=t.has_draft?'<span class="tg'+(t.draft_flag?' w':'')+'">'+(t.draft_flag?"ต้องดูเอง":"มีร่างคำตอบ")+'</span>':"";
+    return '<button type="button" class="chatrow'+(t.unread?' un':'')+'" data-uid="'+esc(t.user_id)+'"><div class="cm"><div class="cn">'+esc(t.name||"ลูกค้า LINE")+(t.phone?' · '+esc(t.phone):"")+'</div><div class="ct2">'+esc(t.last_text||"")+'</div></div><div style="text-align:right"><div class="hint" style="margin:0">'+esc(chTime(t.last_ts))+'</div>'+tag+'</div></button>';
+  }).join("");
+  box.innerHTML=h;
+}
+function openChat(uid){
+  CH.open=uid;CH.thread=null;CH.msgs=[];CH.lastId=0;
+  $("#chatBox").innerHTML='<p class="hint">กำลังโหลด…</p>';
+  chLoad(true);
+}
+function chLoad(first){
+  var uid=CH.open;if(!uid)return;
+  chApi("GET","/api/chats/"+encodeURIComponent(uid)).then(function(r){
+    if(CH.open!==uid)return;
+    var last=r.msgs.length?r.msgs[r.msgs.length-1].id:0,changed=first||last!==CH.lastId;
+    CH.thread=r.thread;CH.msgs=r.msgs;CH.lastId=last;
+    if(changed)renderChatOpen($("#chatBox"),first);
+  }).catch(function(e){if(first){$("#chatBox").innerHTML='<p class="empty">เปิดแชตไม่ได้ ลองใหม่อีกครั้ง</p><button type="button" class="btn ghost sm" id="chBack">กลับ</button>'}});
+}
+function renderChatOpen(box,fresh){
+  var t=CH.thread;if(!t){return}
+  var ta=$("#chText"),keep=ta&&!fresh&&ta.value&&ta.value!==(CH.draftShown||"")?ta.value:null;
+  var h='<div class="filters"><button type="button" class="btn ghost sm" id="chBack">← กลับ</button><b style="align-self:center">'+esc(t.name||"ลูกค้า LINE")+(t.phone?' · '+esc(t.phone):"")+'</b></div>';
+  h+='<div id="chMsgs">'+CH.msgs.map(function(m){return '<div class="bub'+(m.dir==="out"?" out":"")+'">'+esc(m.text)+'<small>'+esc(chTime(m.ts))+'</small></div>'}).join("")+'</div>';
+  if(t.draft&&t.flag)h+='<div class="chatwarn"><b>ต้องให้พนักงานดูเอง</b>'+(t.reason?' · '+esc(t.reason):"")+'</div>';
+  h+='<label class="f"><span>'+(t.draft?"ร่างคำตอบจาก AI (แก้ไขได้ก่อนส่ง)":"พิมพ์ข้อความตอบลูกค้า")+'</span><textarea class="in" id="chText" rows="6" placeholder="พิมพ์ข้อความ…"></textarea></label>';
+  h+='<div class="filters"><button type="button" class="btn blue sm" id="chSend">ส่งเข้า LINE</button><button type="button" class="btn ghost sm" id="chRegen">ให้ AI ร่างใหม่</button><button type="button" class="btn ghost sm" id="chDismiss">ปิดเรื่อง (ไม่ตอบ)</button></div>';
+  h+='<p class="hint" id="chStatus"></p>';
+  box.innerHTML=h;
+  CH.draftShown=t.draft||"";
+  var ta2=$("#chText");ta2.value=keep!=null?keep:(t.draft||"");
+  var m=$("#chMsgs");if(m)m.scrollTop=m.scrollHeight;
+  try{window.scrollTo(0,document.body.scrollHeight)}catch(e){}
+}
+function chBusy(on,msg){CH.busy=on;["#chSend","#chRegen","#chDismiss"].forEach(function(s){var b=$(s);if(b)b.disabled=on});var st=$("#chStatus");if(st)st.textContent=msg||""}
+function chBind(){
+  var box=$("#chatBox");if(!box)return;
+  box.addEventListener("click",function(e){
+    var row=e.target.closest&&e.target.closest(".chatrow");
+    if(row){openChat(row.dataset.uid);return}
+    var id=e.target.id;
+    if(id==="chBack"){CH.open=null;chPoll();renderChat();return}
+    if(CH.busy||!CH.open)return;
+    var uid=CH.open;
+    if(id==="chSend"){
+      var text=$("#chText").value.trim();if(!text){toast("ยังไม่ได้พิมพ์ข้อความ");return}
+      chBusy(true,"กำลังส่ง…");
+      chApi("POST","/api/chats/"+encodeURIComponent(uid)+"/send",{text:text}).then(function(){toast("ส่งเข้า LINE ลูกค้าแล้ว");chBusy(false);CH.draftShown="";chLoad(true);chPoll()}).catch(function(er){chBusy(false,(er&&er.message)||"ส่งไม่สำเร็จ")});
+    }else if(id==="chRegen"){
+      chBusy(true,"AI กำลังร่างคำตอบ…");
+      chApi("POST","/api/chats/"+encodeURIComponent(uid)+"/draft").then(function(){chBusy(false);chLoad(true)}).catch(function(er){chBusy(false,(er&&er.message)||"ร่างไม่สำเร็จ")});
+    }else if(id==="chDismiss"){
+      chBusy(true,"");
+      chApi("POST","/api/chats/"+encodeURIComponent(uid)+"/dismiss").then(function(){CH.open=null;chBusy(false);chPoll();renderChat()}).catch(function(){chBusy(false,"ไม่สำเร็จ")});
+    }
+  });
+}
+(function chInit(){
+  if(!window.csApi)return;
+  var tb=$("#chatTab");if(tb)tb.hidden=false;
+  chBind();
+  chPoll();
+  setInterval(function(){chPoll();if(S.tab==="chat"&&CH.open&&!CH.busy)chLoad(false)},12000);
+})();
+
 /* ---------- tabs & pages ---------- */
 function setTab(t){
-  if(["intake","queue","service","customers","prices","book"].indexOf(t)<0)t="intake";
+  if(["intake","queue","service","customers","prices","book","chat"].indexOf(t)<0||(t==="chat"&&!window.csApi))t="intake";
   document.body.classList.toggle("bookmode",t==="book");
   S.tab=t;
   $$(".tab").forEach(function(b){b.setAttribute("aria-selected",String(b.dataset.tab===t))});
-  ["intake","queue","service","customers","prices","book"].forEach(function(n){$("#v-"+n).hidden=n!==t});
+  ["intake","queue","service","customers","prices","book","chat"].forEach(function(n){$("#v-"+n).hidden=n!==t});
   $("#bar").hidden=t!=="intake";
   if(location.hash.slice(1)!==t){try{history.replaceState(null,"","#"+t)}catch(e){location.hash=t}}
   if(t==="queue")renderQueue();
@@ -667,6 +765,7 @@ function setTab(t){
   if(t==="service")renderService();
   if(t==="book")renderBook();
   if(t==="prices")renderPrices();
+  if(t==="chat"){chPoll();renderChat()}
 }
 function goPage(n){
   if(n===1&&S.editJobId){toast("แก้ไขข้อมูลรถและลูกค้าไม่ได้ แก้ไขได้เฉพาะโปรแกรมที่ทำ");return}

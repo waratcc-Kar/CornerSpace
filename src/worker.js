@@ -5,6 +5,8 @@
    - /api/line/push, /line-webhook : ส่ง/รับข้อความ LINE OA
    - scheduled   : ทุกวัน 09:00 เวลาไทย เตือนลูกค้าที่นัดบริการพรุ่งนี้ */
 
+import { KB } from "./knowledge.js";
+
 const COLLS = new Set(["jobs", "customers", "bookings", "settings"]);
 const LIMITS = { jobs: 500, customers: 2000, bookings: 1000, settings: 20 };
 const MAX_DOC = 1_800_000;             /* D1: 1 แถวไม่เกิน ~2MB */
@@ -31,7 +33,11 @@ function init(db) {
       db.prepare("CREATE TABLE IF NOT EXISTS imgs (id TEXT PRIMARY KEY, job TEXT NOT NULL, mime TEXT NOT NULL, b64 TEXT NOT NULL)"),
       db.prepare("CREATE INDEX IF NOT EXISTS imgs_job ON imgs (job)"),
       db.prepare("CREATE TABLE IF NOT EXISTS line_users (user_id TEXT PRIMARY KEY, phone TEXT NOT NULL, linked_at INTEGER NOT NULL)"),
-      db.prepare("CREATE INDEX IF NOT EXISTS line_phone ON line_users (phone)")
+      db.prepare("CREATE INDEX IF NOT EXISTS line_phone ON line_users (phone)"),
+      db.prepare("CREATE TABLE IF NOT EXISTS chat_threads (user_id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', last_ts INTEGER NOT NULL DEFAULT 0, last_text TEXT NOT NULL DEFAULT '', unread INTEGER NOT NULL DEFAULT 0, draft TEXT NOT NULL DEFAULT '', draft_flag INTEGER NOT NULL DEFAULT 0, draft_reason TEXT NOT NULL DEFAULT '', draft_for INTEGER NOT NULL DEFAULT 0)"),
+      db.prepare("CREATE INDEX IF NOT EXISTS chat_last ON chat_threads (last_ts DESC)"),
+      db.prepare("CREATE TABLE IF NOT EXISTS chat_msgs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, dir TEXT NOT NULL, text TEXT NOT NULL, ts INTEGER NOT NULL)"),
+      db.prepare("CREATE INDEX IF NOT EXISTS chat_msgs_u ON chat_msgs (user_id, id)")
     ]).catch((e) => { schemaReady = null; throw e; });
   }
   return schemaReady;
@@ -213,6 +219,7 @@ async function api(req, env, url) {
 
   if (parts[0] === "photo" && m === "POST") return readPhoto(req, env);
   if (parts[0] === "line" && parts[1] === "push" && m === "POST") return pushLine(req, env);
+  if (parts[0] === "chats") return chatsApi(req, env, parts, m);
   return fail(404, "not_found", "ไม่พบ");
 }
 
@@ -266,7 +273,143 @@ async function pushLine(req, env) {
   return json({ sent: true });
 }
 
-async function lineWebhook(req, env) {
+
+/* ---------------- แชตลูกค้า + ผู้ช่วยร่างคำตอบ (AI ร่าง พนักงานกดส่งเอง) ---------------- */
+const UID_RE = /^[A-Za-z0-9]{10,64}$/;
+const DRAFTS_PER_DAY = 300;
+
+function msgText(m) {
+  if (!m) return "";
+  if (m.type === "text") return String(m.text || "").slice(0, 2000);
+  const kinds = { image: "รูปภาพ", sticker: "สติกเกอร์", video: "วิดีโอ", audio: "ข้อความเสียง", file: "ไฟล์", location: "ตำแหน่งที่ตั้ง" };
+  return "[ลูกค้าส่ง" + (kinds[m.type] || "ข้อความที่ไม่ใช่ตัวอักษร") + "]";
+}
+
+async function lineProfileName(env, uid) {
+  try {
+    const r = await fetch("https://api.line.me/v2/bot/profile/" + uid, { headers: { Authorization: "Bearer " + env.LINE_CHANNEL_ACCESS_TOKEN } });
+    if (!r.ok) return "";
+    const j = await r.json();
+    return String((j && j.displayName) || "").slice(0, 80);
+  } catch (e) { return ""; }
+}
+
+async function logIncoming(env, uid, text) {
+  const ts = Date.now();
+  const row = await env.DB.prepare("SELECT name FROM chat_threads WHERE user_id = ?1").bind(uid).first();
+  const name = row && row.name ? row.name : await lineProfileName(env, uid);
+  const ins = await env.DB.prepare("INSERT INTO chat_msgs (user_id, dir, text, ts) VALUES (?1, 'in', ?2, ?3)").bind(uid, text, ts).run();
+  const mid = ins.meta.last_row_id;
+  await env.DB.prepare(
+    "INSERT INTO chat_threads (user_id, name, last_ts, last_text, unread) VALUES (?1, ?2, ?3, ?4, 1) " +
+    "ON CONFLICT (user_id) DO UPDATE SET name = CASE WHEN excluded.name <> '' THEN excluded.name ELSE chat_threads.name END, last_ts = excluded.last_ts, last_text = excluded.last_text, unread = chat_threads.unread + 1, draft = '', draft_flag = 0, draft_reason = ''"
+  ).bind(uid, name, ts, text.slice(0, 200)).run();
+  return mid;
+}
+
+function thaiNow() {
+  const d = new Date(Date.now() + 7 * 3600e3);
+  const days = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+  return "วัน" + days[d.getUTCDay()] + "ที่ " + d.toISOString().slice(0, 10) + " เวลา " + d.toISOString().slice(11, 16) + " น. (เวลาไทย)";
+}
+
+/* สร้างร่างคำตอบจากประวัติแชต เก็บไว้ในเธรด (ไม่ส่งหาลูกค้า) คืน {ok, draft?, why?} */
+async function makeDraft(env, uid) {
+  if (!env.ANTHROPIC_API_KEY) return { ok: false, why: "no_key" };
+  const day = "drafts_" + new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+  await env.DB.prepare("INSERT OR IGNORE INTO meta (k, v) VALUES (?1, 0)").bind(day).run();
+  const used = (await env.DB.prepare("SELECT v FROM meta WHERE k = ?1").bind(day).first()).v;
+  if (used >= DRAFTS_PER_DAY) return { ok: false, why: "daily_limit" };
+  await env.DB.prepare("UPDATE meta SET v = v + 1 WHERE k = ?1").bind(day).run();
+
+  const rs = await env.DB.prepare("SELECT id, dir, text FROM chat_msgs WHERE user_id = ?1 ORDER BY id DESC LIMIT 14").bind(uid).all();
+  const rows = rs.results.reverse();
+  if (!rows.length || rows[rows.length - 1].dir !== "in") return { ok: false, why: "no_pending" };
+  const lastId = rows[rows.length - 1].id;
+  const msgs = [];
+  for (const r of rows) {
+    const role = r.dir === "in" ? "user" : "assistant";
+    const text = r.dir === "in" ? "ข้อความลูกค้า: " + r.text : r.text;
+    if (msgs.length && msgs[msgs.length - 1].role === role) msgs[msgs.length - 1].content += "\n" + text;
+    else msgs.push({ role, content: text });
+  }
+  while (msgs.length && msgs[0].role !== "user") msgs.shift();
+  if (!msgs.length) return { ok: false, why: "no_pending" };
+
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: env.CHAT_MODEL || env.MODEL || DEFAULT_MODEL,
+      max_tokens: 900,
+      system: [{ type: "text", text: KB, cache_control: { type: "ephemeral" } }, { type: "text", text: "ตอนนี้: " + thaiNow() }],
+      messages: msgs
+    })
+  });
+  if (!r.ok) {
+    let why = "";
+    try { const ej = await r.json(); why = (ej && ej.error && (ej.error.type + ": " + ej.error.message)) || ""; } catch (e) { /* ignore */ }
+    return { ok: false, why: ("ai " + r.status + " " + why).slice(0, 200) };
+  }
+  const out = await r.json();
+  const text = (out.content || []).map((c) => c.text || "").join("");
+  let j = null;
+  const mm = text.match(/\{[\s\S]*\}/);
+  if (mm) { try { j = JSON.parse(mm[0]); } catch (e) { /* ใช้ข้อความดิบด้านล่าง */ } }
+  const reply = String(j && typeof j.reply === "string" ? j.reply : text).trim().slice(0, 4000);
+  const flag = j ? (j.needs_staff ? 1 : 0) : 1;
+  const reason = String((j && j.reason) || (j ? "" : "AI ตอบรูปแบบไม่ตรง ตรวจข้อความก่อนส่ง")).slice(0, 300);
+  /* ถ้าระหว่างรอ AI ลูกค้าพิมพ์ข้อความใหม่ ร่างนี้เก่าแล้ว ทิ้ง */
+  const res = await env.DB.prepare("UPDATE chat_threads SET draft = ?2, draft_flag = ?3, draft_reason = ?4, draft_for = ?5 WHERE user_id = ?1 AND (SELECT max(id) FROM chat_msgs WHERE user_id = ?1) = ?5")
+    .bind(uid, reply, flag, reason, lastId).run();
+  return { ok: true, draft: reply, flag: !!flag, reason, stale: !(res.meta && res.meta.changes) };
+}
+
+async function chatsApi(req, env, parts, m) {
+  if (!parts[1] && m === "GET") {
+    const rs = await env.DB.prepare(
+      "SELECT t.user_id, t.name, t.last_ts, t.last_text, t.unread, (t.draft <> '') AS has_draft, t.draft_flag, (SELECT phone FROM line_users u WHERE u.user_id = t.user_id) AS phone " +
+      "FROM chat_threads t ORDER BY t.last_ts DESC LIMIT 60").all();
+    const pending = (await env.DB.prepare("SELECT count(*) AS n FROM chat_threads WHERE unread > 0 OR draft <> ''").first()).n;
+    return json({ threads: rs.results, pending });
+  }
+  const uid = parts[1];
+  if (!UID_RE.test(uid || "")) return fail(400, "bad_args", "ข้อมูลไม่ถูกต้อง");
+  const th = await env.DB.prepare("SELECT t.*, (SELECT phone FROM line_users u WHERE u.user_id = t.user_id) AS phone FROM chat_threads t WHERE t.user_id = ?1").bind(uid).first();
+  if (!th) return fail(404, "not_found", "ไม่พบแชต");
+  if (!parts[2] && m === "GET") {
+    const rs = await env.DB.prepare("SELECT id, dir, text, ts FROM chat_msgs WHERE user_id = ?1 ORDER BY id DESC LIMIT 60").bind(uid).all();
+    await env.DB.prepare("UPDATE chat_threads SET unread = 0 WHERE user_id = ?1").bind(uid).run();
+    return json({
+      thread: { user_id: th.user_id, name: th.name, phone: th.phone || "", draft: th.draft, flag: !!th.draft_flag, reason: th.draft_reason },
+      msgs: rs.results.reverse()
+    });
+  }
+  if (parts[2] === "send" && m === "POST") {
+    if (!env.LINE_CHANNEL_ACCESS_TOKEN) return fail(503, "not_configured", "ยังไม่ได้ตั้งค่า LINE");
+    let body;
+    try { body = await readJson(req, 20000); } catch (e) { return fail(400, "bad_body", "ข้อมูลไม่ถูกต้อง"); }
+    const text = String((body && body.text) || "").trim();
+    if (!text) return fail(400, "bad_args", "ข้อความว่าง");
+    try { await linePush(env, uid, text); } catch (e) { return fail(502, "line_error", "ส่งเข้า LINE ไม่สำเร็จ ลูกค้าอาจบล็อกร้านอยู่"); }
+    const ts = Date.now();
+    await env.DB.prepare("INSERT INTO chat_msgs (user_id, dir, text, ts) VALUES (?1, 'out', ?2, ?3)").bind(uid, text.slice(0, 4900), ts).run();
+    await env.DB.prepare("UPDATE chat_threads SET draft = '', draft_flag = 0, draft_reason = '', unread = 0, last_ts = ?2, last_text = ?3 WHERE user_id = ?1").bind(uid, ts, ("ร้าน: " + text).slice(0, 200)).run();
+    return json({ sent: true });
+  }
+  if (parts[2] === "dismiss" && m === "POST") {
+    await env.DB.prepare("UPDATE chat_threads SET draft = '', draft_flag = 0, draft_reason = '', unread = 0 WHERE user_id = ?1").bind(uid).run();
+    return json({ ok: true });
+  }
+  if (parts[2] === "draft" && m === "POST") {
+    const r = await makeDraft(env, uid);
+    if (!r.ok) return fail(r.why === "no_key" ? 503 : 502, "ai_failed", r.why === "daily_limit" ? "ร่างคำตอบครบโควตารายวันแล้ว" : r.why === "no_pending" ? "ลูกค้ายังไม่ได้ส่งข้อความใหม่" : "AI ตอบไม่สำเร็จ " + (r.why || ""));
+    return json({ draft: r.draft, flag: r.flag, reason: r.reason });
+  }
+  return fail(404, "not_found", "ไม่พบ");
+}
+
+async function lineWebhook(req, env, ctx) {
   if (req.method !== "POST") return new Response("ok");
   if (!env.LINE_CHANNEL_SECRET) return new Response("not configured", { status: 503 });
   const raw = await req.text();
@@ -282,15 +425,20 @@ async function lineWebhook(req, env) {
   for (const ev of events) {
     try {
       const uid = ev.source && ev.source.userId;
-      if (!uid || !ev.replyToken) continue;
+      if (!uid || !ev.replyToken || (ev.source && ev.source.type && ev.source.type !== "user")) continue;
       let reply = null;
       if (ev.type === "follow") {
         reply = "ยินดีต้อนรับสู่ Corner Space\nพิมพ์เบอร์โทรที่ลงทะเบียนกับร้าน (เช่น 0812345678) เพื่อรับแจ้งเตือนนัดบริการทาง LINE";
-      } else if (ev.type === "message" && ev.message && ev.message.type === "text") {
-        const phone = normPhone(ev.message.text);
+      } else if (ev.type === "message" && ev.message) {
+        const phone = ev.message.type === "text" ? normPhone(ev.message.text) : "";
         if (/^0\d{8,9}$/.test(phone)) {
           await env.DB.prepare("INSERT INTO line_users (user_id, phone, linked_at) VALUES (?1, ?2, ?3) ON CONFLICT (user_id) DO UPDATE SET phone = excluded.phone, linked_at = excluded.linked_at").bind(uid, phone, Date.now()).run();
           reply = "ผูกบัญชีเรียบร้อยแล้ว ร้านจะแจ้งเตือนนัดบริการให้ทาง LINE นี้ครับ/ค่ะ";
+        } else {
+          /* ข้อความทั่วไป: เก็บไว้ให้พนักงานดูในแอป และให้ AI ร่างคำตอบ (ไม่ส่งหาลูกค้าเอง) */
+          await logIncoming(env, uid, msgText(ev.message));
+          const job = makeDraft(env, uid).catch((e) => console.error("draft failed", e));
+          if (ctx && ctx.waitUntil) ctx.waitUntil(job); else await job;
         }
       }
       if (reply) {
@@ -326,10 +474,10 @@ async function dailyReminders(env) {
 }
 
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
     try {
-      if (url.pathname === "/line-webhook") return await lineWebhook(req, env);
+      if (url.pathname === "/line-webhook") return await lineWebhook(req, env, ctx);
       if (url.pathname.startsWith("/api/")) return await api(req, env, url);
     } catch (e) {
       console.error("error", e && e.stack || e);
