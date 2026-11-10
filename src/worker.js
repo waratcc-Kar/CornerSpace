@@ -358,7 +358,7 @@ async function makeDraft(env, uid) {
       headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: env.CHAT_MODEL || env.MODEL || DEFAULT_MODEL,
-        max_tokens: 1500,
+        max_tokens: 4000,
         system: [{ type: "text", text: KB, cache_control: { type: "ephemeral" } }, { type: "text", text: "ตอนนี้: " + thaiNow() }],
         messages: build(attempt ? "\nสำคัญ: ผลลัพธ์ต้องเป็น JSON ที่มีคีย์ reply, needs_staff, reason เท่านั้น เริ่มด้วย { และจบด้วย }" : "")
       })
@@ -371,6 +371,7 @@ async function makeDraft(env, uid) {
     }
     const out = await r.json();
     text = (out.content || []).map((c) => c.text || "").join("");
+    if (!text) lastErr = ("ai_empty stop=" + out.stop_reason + " types=" + (out.content || []).map((c) => c.type).join(",") + " out=" + (out.usage && out.usage.output_tokens)).slice(0, 200);
     const mm = text.match(/\{[\s\S]*\}/);
     if (mm) { try { const o = JSON.parse(mm[0]); if (o && typeof o.reply === "string") j = o; } catch (e) { /* ลองใหม่ */ } }
   }
