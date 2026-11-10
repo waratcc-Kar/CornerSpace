@@ -37,7 +37,8 @@ function init(db) {
       db.prepare("CREATE TABLE IF NOT EXISTS chat_threads (user_id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', last_ts INTEGER NOT NULL DEFAULT 0, last_text TEXT NOT NULL DEFAULT '', unread INTEGER NOT NULL DEFAULT 0, draft TEXT NOT NULL DEFAULT '', draft_flag INTEGER NOT NULL DEFAULT 0, draft_reason TEXT NOT NULL DEFAULT '', draft_for INTEGER NOT NULL DEFAULT 0)"),
       db.prepare("CREATE INDEX IF NOT EXISTS chat_last ON chat_threads (last_ts DESC)"),
       db.prepare("CREATE TABLE IF NOT EXISTS chat_msgs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, dir TEXT NOT NULL, text TEXT NOT NULL, ts INTEGER NOT NULL)"),
-      db.prepare("CREATE INDEX IF NOT EXISTS chat_msgs_u ON chat_msgs (user_id, id)")
+      db.prepare("CREATE INDEX IF NOT EXISTS chat_msgs_u ON chat_msgs (user_id, id)"),
+      db.prepare("CREATE TABLE IF NOT EXISTS chat_pause (user_id TEXT PRIMARY KEY, until INTEGER NOT NULL)")
     ]).catch((e) => { schemaReady = null; throw e; });
   }
   return schemaReady;
@@ -365,10 +366,58 @@ async function makeDraft(env, uid) {
   return { ok: true, draft: reply, flag: !!flag, reason, stale: !(res.meta && res.meta.changes) };
 }
 
+
+/* ---------------- ตอบลูกค้าอัตโนมัติ (เฉพาะเรื่องที่ AI มั่นใจและไม่เสี่ยง) ---------------- */
+const HOLD_TEXT = "รับเรื่องแล้วครับ ทีมงานจะรีบตอบกลับโดยเร็วที่สุด\nเวลาทำการ จันทร์–เสาร์ 08:00–17:30 ครับ";
+const AUTO_PER_HOUR = 12;
+
+async function lineReplyOrPush(env, replyToken, uid, text) {
+  if (replyToken) {
+    try {
+      const r = await fetch("https://api.line.me/v2/bot/message/reply", {
+        method: "POST",
+        headers: { "content-type": "application/json", Authorization: "Bearer " + env.LINE_CHANNEL_ACCESS_TOKEN },
+        body: JSON.stringify({ replyToken, messages: [{ type: "text", text: String(text).slice(0, 4900) }] })
+      });
+      if (r.ok) return;
+    } catch (e) { /* ลอง push ต่อ */ }
+  }
+  await linePush(env, uid, text);
+}
+
+async function autoEnabled(env) {
+  const cfg = await getDoc(env, "settings", "ai");
+  return !(cfg && cfg.auto === false);
+}
+
+async function handleChat(env, uid, replyToken, kind) {
+  const d = await makeDraft(env, uid);
+  if (!d.ok || d.stale) return;
+  if (!env.LINE_CHANNEL_ACCESS_TOKEN || !(await autoEnabled(env))) return;
+  if (kind === "sticker") return;
+  const now = Date.now();
+  const pz = await env.DB.prepare("SELECT until FROM chat_pause WHERE user_id = ?1").bind(uid).first();
+  if (pz && pz.until > now) return;
+  const cnt = (await env.DB.prepare("SELECT count(*) AS n FROM chat_msgs WHERE user_id = ?1 AND dir IN ('auto','hold') AND ts > ?2").bind(uid, now - 3600e3).first()).n;
+  if (cnt >= AUTO_PER_HOUR) return;
+  const safe = kind === "text" && !d.flag && d.draft;
+  let text = d.draft;
+  if (!safe) {
+    /* ต้องให้พนักงานดู: ส่งข้อความรอสั้นๆ ครั้งเดียวต่อ 10 นาที แล้วปล่อยให้พนักงานตอบต่อ */
+    const recent = await env.DB.prepare("SELECT count(*) AS n FROM chat_msgs WHERE user_id = ?1 AND dir IN ('hold','out') AND ts > ?2").bind(uid, now - 600e3).first();
+    if (recent.n > 0) return;
+    text = HOLD_TEXT;
+  }
+  try { await lineReplyOrPush(env, replyToken, uid, text); } catch (e) { console.error("auto reply failed", e); return; }
+  await env.DB.prepare("INSERT INTO chat_msgs (user_id, dir, text, ts) VALUES (?1, ?4, ?2, ?3)").bind(uid, text.slice(0, 4900), Date.now(), safe ? "auto" : "hold").run();
+  if (safe) await env.DB.prepare("UPDATE chat_threads SET draft = '', draft_flag = 0, draft_reason = '', unread = 0, last_text = ?2, last_ts = ?3 WHERE user_id = ?1").bind(uid, ("AI: " + text).slice(0, 200), Date.now()).run();
+}
+
 async function chatsApi(req, env, parts, m) {
   if (!parts[1] && m === "GET") {
     const rs = await env.DB.prepare(
-      "SELECT t.user_id, t.name, t.last_ts, t.last_text, t.unread, (t.draft <> '') AS has_draft, t.draft_flag, (SELECT phone FROM line_users u WHERE u.user_id = t.user_id) AS phone " +
+      "SELECT t.user_id, t.name, t.last_ts, t.last_text, t.unread, (t.draft <> '') AS has_draft, t.draft_flag, (SELECT phone FROM line_users u WHERE u.user_id = t.user_id) AS phone, " +
+      "(SELECT dir FROM chat_msgs m WHERE m.user_id = t.user_id ORDER BY m.id DESC LIMIT 1) AS last_dir " +
       "FROM chat_threads t ORDER BY t.last_ts DESC LIMIT 60").all();
     const pending = (await env.DB.prepare("SELECT count(*) AS n FROM chat_threads WHERE unread > 0 OR draft <> ''").first()).n;
     return json({ threads: rs.results, pending });
@@ -381,7 +430,7 @@ async function chatsApi(req, env, parts, m) {
     const rs = await env.DB.prepare("SELECT id, dir, text, ts FROM chat_msgs WHERE user_id = ?1 ORDER BY id DESC LIMIT 60").bind(uid).all();
     await env.DB.prepare("UPDATE chat_threads SET unread = 0 WHERE user_id = ?1").bind(uid).run();
     return json({
-      thread: { user_id: th.user_id, name: th.name, phone: th.phone || "", draft: th.draft, flag: !!th.draft_flag, reason: th.draft_reason },
+      thread: { user_id: th.user_id, name: th.name, phone: th.phone || "", draft: th.draft, flag: !!th.draft_flag, reason: th.draft_reason, paused_until: ((await env.DB.prepare("SELECT until FROM chat_pause WHERE user_id = ?1").bind(uid).first()) || {}).until || 0 },
       msgs: rs.results.reverse()
     });
   }
@@ -395,7 +444,17 @@ async function chatsApi(req, env, parts, m) {
     const ts = Date.now();
     await env.DB.prepare("INSERT INTO chat_msgs (user_id, dir, text, ts) VALUES (?1, 'out', ?2, ?3)").bind(uid, text.slice(0, 4900), ts).run();
     await env.DB.prepare("UPDATE chat_threads SET draft = '', draft_flag = 0, draft_reason = '', unread = 0, last_ts = ?2, last_text = ?3 WHERE user_id = ?1").bind(uid, ts, ("ร้าน: " + text).slice(0, 200)).run();
+    /* พนักงานเข้ามาตอบเอง: หยุด AI ตอบอัตโนมัติในแชตนี้ 12 ชั่วโมง */
+    await env.DB.prepare("INSERT INTO chat_pause (user_id, until) VALUES (?1, ?2) ON CONFLICT (user_id) DO UPDATE SET until = excluded.until").bind(uid, ts + 12 * 3600e3).run();
     return json({ sent: true });
+  }
+  if (parts[2] === "pause" && m === "POST") {
+    let body;
+    try { body = await readJson(req, 2000); } catch (e) { return fail(400, "bad_body", "ข้อมูลไม่ถูกต้อง"); }
+    const hours = Math.max(0, Math.min(24 * 7, Number(body && body.hours) || 0));
+    if (!hours) await env.DB.prepare("DELETE FROM chat_pause WHERE user_id = ?1").bind(uid).run();
+    else await env.DB.prepare("INSERT INTO chat_pause (user_id, until) VALUES (?1, ?2) ON CONFLICT (user_id) DO UPDATE SET until = excluded.until").bind(uid, Date.now() + hours * 3600e3).run();
+    return json({ ok: true });
   }
   if (parts[2] === "dismiss" && m === "POST") {
     await env.DB.prepare("UPDATE chat_threads SET draft = '', draft_flag = 0, draft_reason = '', unread = 0 WHERE user_id = ?1").bind(uid).run();
@@ -437,7 +496,7 @@ async function lineWebhook(req, env, ctx) {
         } else {
           /* ข้อความทั่วไป: เก็บไว้ให้พนักงานดูในแอป และให้ AI ร่างคำตอบ (ไม่ส่งหาลูกค้าเอง) */
           await logIncoming(env, uid, msgText(ev.message));
-          const job = makeDraft(env, uid).catch((e) => console.error("draft failed", e));
+          const job = handleChat(env, uid, ev.replyToken, ev.message.type).catch((e) => console.error("chat failed", e));
           if (ctx && ctx.waitUntil) ctx.waitUntil(job); else await job;
         }
       }

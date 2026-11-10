@@ -165,6 +165,7 @@ textarea.in{min-height:76px;resize:vertical}
 .chatrow .cm{min-width:0;flex:1}.chatrow .cn{font-weight:600}.chatrow .ct2{color:var(--muted);font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chatrow .tg{font-size:.75rem;border-radius:999px;padding:1px 9px;white-space:nowrap;background:var(--ok-bg);color:var(--ok-ink)}
 .chatrow .tg.w{background:var(--yellow);color:var(--yellow-ink)}
+.chauto{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;margin-bottom:8px;border:2px solid var(--line);border-radius:12px;background:var(--card)}.chauto input{width:22px;height:22px;margin-top:2px;flex:none}
 .bub{max-width:86%;padding:8px 12px;border-radius:14px;margin:6px 0;white-space:pre-wrap;word-break:break-word;border:1px solid var(--line);background:var(--card)}
 .bub.out{margin-left:auto;background:var(--ok-bg);color:var(--ok-ink);border-color:transparent}
 .bub small{display:block;color:var(--muted);font-size:.72rem;margin-top:2px}.bub.out small{color:inherit;opacity:.7}
@@ -683,10 +684,11 @@ function chPoll(){
 function renderChat(){
   var box=$("#chatBox");if(!box)return;
   if(CH.open)return renderChatOpen(box);
-  var h='<p class="hint" style="margin:0 0 10px">ข้อความที่ลูกค้าทักเข้า LINE @cs2016 AI จะร่างคำตอบให้ พนักงานตรวจแล้วกดส่ง (ยังไม่ส่งอัตโนมัติ) · คำตอบที่ตอบจากแอป LINE OA Manager โดยตรงจะไม่แสดงที่นี่</p>';
+  var h='<label class="chauto"><input type="checkbox" id="chAuto"'+(CH.auto!==false?" checked":"")+(S.owner?"":" disabled")+'> <span><b>ให้ AI ตอบลูกค้าอัตโนมัติ</b> เฉพาะเรื่องปลอดภัย (ที่อยู่ เวลาเปิด โปรแกรม ราคาล้าง) เรื่องอื่นส่งข้อความรอแล้วให้พนักงานตอบ'+(S.owner?"":" · เจ้าของร้านเป็นผู้เปลี่ยนได้")+'</span></label><p class="hint" style="margin:0 0 10px">เรื่องที่ต้องดูเอง (ขอจองคิว ขอลดราคา เคลม ไม่มีข้อมูล) จะมีป้ายเหลือง · ตอบจากแท็บนี้เพื่อให้ AI เห็นประวัติ คำตอบที่ตอบจากแอป LINE OA Manager โดยตรงจะไม่แสดงที่นี่</p>';
   if(!CH.list.length)h+='<p class="empty">ยังไม่มีแชตลูกค้า</p>';
   h+=CH.list.map(function(t){
-    var tag=t.has_draft?'<span class="tg'+(t.draft_flag?' w':'')+'">'+(t.draft_flag?"ต้องดูเอง":"มีร่างคำตอบ")+'</span>':"";
+    var tag=t.has_draft?'<span class="tg'+(t.draft_flag?' w':'')+'">'+(t.draft_flag?"ต้องดูเอง":"มีร่างคำตอบ")+'</span>':(t.last_dir==="auto"?'<span class="tg">AI ตอบแล้ว</span>':"");
+    if(!t.has_draft&&t.unread)tag='<span class="tg w">ต้องดูเอง</span>';
     return '<button type="button" class="chatrow'+(t.unread?' un':'')+'" data-uid="'+esc(t.user_id)+'"><div class="cm"><div class="cn">'+esc(t.name||"ลูกค้า LINE")+(t.phone?' · '+esc(t.phone):"")+'</div><div class="ct2">'+esc(t.last_text||"")+'</div></div><div style="text-align:right"><div class="hint" style="margin:0">'+esc(chTime(t.last_ts))+'</div>'+tag+'</div></button>';
   }).join("");
   box.innerHTML=h;
@@ -709,10 +711,12 @@ function renderChatOpen(box,fresh){
   var t=CH.thread;if(!t){return}
   var ta=$("#chText"),keep=ta&&!fresh&&ta.value&&ta.value!==(CH.draftShown||"")?ta.value:null;
   var h='<div class="filters"><button type="button" class="btn ghost sm" id="chBack">← กลับ</button><b style="align-self:center">'+esc(t.name||"ลูกค้า LINE")+(t.phone?' · '+esc(t.phone):"")+'</b></div>';
-  h+='<div id="chMsgs">'+CH.msgs.map(function(m){return '<div class="bub'+(m.dir==="out"?" out":"")+'">'+esc(m.text)+'<small>'+esc(chTime(m.ts))+'</small></div>'}).join("")+'</div>';
+  h+='<div id="chMsgs">'+CH.msgs.map(function(m){return '<div class="bub'+(m.dir!=="in"?" out":"")+'">'+esc(m.text)+'<small>'+(m.dir==="auto"||m.dir==="hold"?"AI ตอบอัตโนมัติ · ":"")+esc(chTime(m.ts))+'</small></div>'}).join("")+'</div>';
   if(t.draft&&t.flag)h+='<div class="chatwarn"><b>ต้องให้พนักงานดูเอง</b>'+(t.reason?' · '+esc(t.reason):"")+'</div>';
   h+='<label class="f"><span>'+(t.draft?"ร่างคำตอบจาก AI (แก้ไขได้ก่อนส่ง)":"พิมพ์ข้อความตอบลูกค้า")+'</span><textarea class="in" id="chText" rows="6" placeholder="พิมพ์ข้อความ…"></textarea></label>';
   h+='<div class="filters"><button type="button" class="btn blue sm" id="chSend">ส่งเข้า LINE</button><button type="button" class="btn ghost sm" id="chRegen">ให้ AI ร่างใหม่</button><button type="button" class="btn ghost sm" id="chDismiss">ปิดเรื่อง (ไม่ตอบ)</button></div>';
+  var pz=t.paused_until&&t.paused_until>Date.now();
+  h+='<div class="filters" style="align-items:center"><span class="hint" style="margin:0">'+(pz?"AI หยุดตอบแชตนี้ถึง "+esc(chTime(t.paused_until)):"AI ตอบอัตโนมัติแชตนี้ได้ (ส่งข้อความจากแท็บนี้แล้วจะหยุดให้ 12 ชม.)")+'</span><button type="button" class="btn ghost sm" id="chPause" data-h="'+(pz?0:24)+'">'+(pz?"เปิด AI อีกครั้ง":"หยุด AI แชตนี้ 24 ชม.")+'</button></div>';
   h+='<p class="hint" id="chStatus"></p>';
   box.innerHTML=h;
   CH.draftShown=t.draft||"";
@@ -728,6 +732,8 @@ function chBind(){
     if(row){openChat(row.dataset.uid);return}
     var id=e.target.id;
     if(id==="chBack"){CH.open=null;chPoll();renderChat();return}
+    if(id==="chPause"&&CH.open){
+      chApi("POST","/api/chats/"+encodeURIComponent(CH.open)+"/pause",{hours:Number(e.target.dataset.h)||0}).then(function(){chLoad(true)}).catch(function(){toast("ไม่สำเร็จ")});return}
     if(CH.busy||!CH.open)return;
     var uid=CH.open;
     if(id==="chSend"){
@@ -743,8 +749,18 @@ function chBind(){
     }
   });
 }
+function chLoadAuto(){
+  chApi("GET","/api/d/settings/ai").then(function(r){CH.auto=!(r&&r.data&&r.data.auto===false);if(S.tab==="chat"&&!CH.open)renderChat()}).catch(function(){});
+}
 (function chInit(){
   if(!window.csApi)return;
+  chLoadAuto();
+  document.addEventListener("change",function(e){
+    if(e.target&&e.target.id==="chAuto"){
+      var on=e.target.checked;
+      chApi("PUT","/api/d/settings/ai",{auto:on}).then(function(){CH.auto=on;toast(on?"เปิดให้ AI ตอบอัตโนมัติแล้ว":"ปิดการตอบอัตโนมัติแล้ว AI จะแค่ร่างคำตอบให้")}).catch(function(){e.target.checked=!on;toast("เปลี่ยนไม่ได้ (เฉพาะเจ้าของร้าน)")});
+    }
+  });
   var tb=$("#chatTab");if(tb)tb.hidden=false;
   chBind();
   chPoll();
