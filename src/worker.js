@@ -350,7 +350,7 @@ async function makeDraft(env, uid, img) {
     return { role: "user", content: last && img ? [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: txt }] : txt };
   });
 
-  let j = null, text = "", lastErr = "", useSearch = true;
+  let j = null, text = "", lastErr = "", useSearch = false;
   for (let attempt = 0; attempt < 3 && !j; attempt++) {
     let r;
     try { r = await fetch("https://api.anthropic.com/v1/messages", {
