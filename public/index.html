@@ -463,13 +463,13 @@ function ppfOpts(prefix,sub,note,items){
 var FC="รอบคัน (ภายใน)",FF="ฝากระโปรง กันชนหน้า ไฟหน้า แก้มซ้าย-ขวา หูกระจก",PFK="ฝากระโปรง กันชนหน้า";
 var CATALOG=[
  {id:"wash",th:"ล้างรถ",by:"wash",single:true,opts:[
-   {id:"gold",th:"Gold",desc:"ล้างรถดีเทลลิ่ง ล้างล้อแม็กด้วย Fireball Iron Burn SE ลงแว็กซ์ Fireball Graphene Spray เคลือบพลาสติกดำและยาง ทำความสะอาดภายใน"},
-   {id:"platinum",th:"Platinum",desc:"เหมาะกับรถสกปรกมาก คราบแมลงเยอะ Pre-Wash 1 รอบก่อนล้างจริง ล้างล้อแม็กด้วย Fireball Iron Burn SE สลายคราบแมลงให้นุ่มและลดรอย เคลือบสี Fireball Paste Wax เคลือบพลาสติกดำและยาง ทำความสะอาดภายในและเคลือบภายใน Fireball Nappa Coat"},
-   {id:"diamond",th:"Diamond",desc:"ล้างด้วยแชมพู 3pH ของ Labocosmetica (ด่าง → กรด → กลาง) ล้างล้อแม็กด้วย Fireball Iron Burn SE ล้างห้องเครื่อง ลูบดินน้ำมันดึงคราบ Oxidation ให้ผิวรถลื่น เคลือบภายในด้วย Nappa Coat เลือกแว็กซ์ภายนอกให้เหมาะกับสีรถ เคลือบพลาสติกดำและยาง"},
-   {id:"premium",th:"Premium",desc:"เหมือนโปรแกรม Gold (ล้างดีเทลลิ่ง ล้างล้อแม็กด้วย Fireball Iron Burn SE ลงแว็กซ์ Fireball Graphene Spray) ในราคาพิเศษสำหรับลูกค้าที่เคลือบเซรามิคและติดฟิล์มใสกับทางร้าน",member:true}]},
+   {id:"gold",th:"Gold",desc:"ล้างดีเทลลิ่งทุกซอกทุกขอบ แปรงขัดล้อทั้งท้องล้อ ก้านล้อ ซุ้มล้อ ล้างล้อแม็กด้วย Fireball Iron Burn SE ฟอกยาง ขจัดคราบสะสมตามโลโก้ เคลือบสีด้วย Fireball Graphene Silica Spray เคลือบพลาสติกดำและยาง ทำความสะอาดภายใน"},
+   {id:"platinum",th:"Platinum",desc:"เหมาะกับรถสกปรกมาก คราบแมลงเยอะ ล้าง 2 รอบ รอบแรกพรีวอชด้วยแชมพูด่างดึงคราบอินทรีย์ (แมลง ดิน คราบสกปรก) ล้างออก แล้วล้างรอบสองด้วยแชมพู pH กลาง ลดรอยจากการล้าง ล้างล้อแม็กด้วย Fireball Iron Burn SE เคลือบสี Fireball Paste Wax เคลือบพลาสติกดำและยาง ทำความสะอาดภายในและเคลือบภายใน Fireball Nappa Coat"},
+   {id:"diamond",th:"Diamond",desc:"ล้าง 3 รอบด้วยแชมพู 3pH ของ Labocosmetica (Primus พรีวอช → Purifica กรด ขจัดคราบหินปูน/คราบน้ำ → Semper กลาง ล้างพร้อมลูบดินน้ำมัน) ล้างล้อแม็กด้วย Fireball Iron Burn SE ล้างห้องเครื่อง ลูบดินน้ำมันดึงคราบ Oxidation ให้ผิวรถลื่น เคลือบภายในด้วย Nappa Coat เลือกแว็กซ์ Fireball ให้เหมาะกับสีรถ (ดำ Black Wax · ขาว White Wax · สีจัด Alien Blood ช่วยกดสีให้เข้ม) เคลือบพลาสติกดำและยาง"},
+   {id:"premium",th:"Premium",desc:"เหมือนโปรแกรม Gold (ล้างดีเทลลิ่ง ล้างล้อแม็กด้วย Fireball Iron Burn SE ลงแว็กซ์ Fireball Graphene Silica Spray) ในราคาพิเศษสำหรับลูกค้าที่เคลือบเซรามิคและติดฟิล์มใสกับทางร้าน",member:true}]},
  {id:"polish",th:"ขัดสี",by:"wash",single:true,opts:[
-   {id:"pcs",th:"PCS",desc:"ขัดสี 2 ขั้นตอน เน้นลบริ้วรอย ลบได้ 80–100% รวมล้างรถ เคลือบสี ล้างห้องเครื่อง"},
-   {id:"wetlook",th:"Wetlook",desc:"ขัดสีขั้นตอนเดียว ชักเงาให้ผิวใส รวมล้างรถ เคลือบสี ล้างห้องเครื่อง"}]},
+   {id:"pcs",th:"PCS",desc:"ขัดสี 2 ขั้นตอน (ขนแกะ แล้วฟองน้ำขัด) เน้นลบริ้วรอย ลบรอยได้ถึงประมาณ 90% รวมล้างรถ เคลือบสี ล้างห้องเครื่อง"},
+   {id:"wetlook",th:"Wetlook",desc:"ขัดสีขั้นตอนเดียวด้วยฟองน้ำขัดกลาง ปรับผิวให้กลับมาใส รอยลดประมาณ 70–80% รอยขนแมวดีขึ้นถึงประมาณ 90% รวมล้างรถ เคลือบสี ล้างห้องเครื่อง"}]},
  {id:"interior",th:"Interior Care",by:"wash",pk:true,opts:[
    {id:"care",th:"Interior Care",desc:"ทำความสะอาดภายใน รวมบริการล้างรถ เคลือบสี"},
    {id:"fabric",th:"เบาะผ้า / กำมะหยี่ (เพิ่ม)",by:"flat"}]},
