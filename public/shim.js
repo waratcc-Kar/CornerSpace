@@ -178,7 +178,7 @@
       }).then(function (d) {
         if (d && d.json !== undefined && d.json !== null) return d.json;
         throw { code: "invalid_json" };
-      }).catch(function (e) { throw e && e.code ? e : { code: "error" }; });
+      }).catch(function (e) { throw e && e.code ? e : { code: "error", message: String(e && e.message || e) }; });
     };
     return f;
   }

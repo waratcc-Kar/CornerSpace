@@ -232,7 +232,11 @@ async function readPhoto(req, env) {
     body: JSON.stringify({ model: env.MODEL || DEFAULT_MODEL, max_tokens: 800, messages: [{ role: "user", content }] })
   });
   if (r.status === 429) return fail(429, "rate_limited", "ใช้งานถี่เกินไป");
-  if (!r.ok) return fail(502, "ai_failed", "AI ตอบไม่สำเร็จ " + r.status);
+  if (!r.ok) {
+    let why = "";
+    try { const ej = await r.json(); why = (ej && ej.error && (ej.error.type + ": " + ej.error.message)) || ""; } catch (e) { /* ignore */ }
+    return fail(502, "ai_failed", ("AI ตอบไม่สำเร็จ " + r.status + " " + why).slice(0, 300));
+  }
   const out = await r.json();
   const text = (out.content || []).map((c) => c.text || "").join("");
   const m = text.match(/\{[\s\S]*\}/);

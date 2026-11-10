@@ -1138,7 +1138,7 @@ function photoErr(e){
   if(c==="image_rejected"){setStatus("ไฟล์รูปนี้ใช้ไม่ได้ ลองถ่ายหรือเลือกรูปใหม่",true);return}
   if(c==="rate_limited"){setStatus("ใช้งานถี่เกินไป รอสักครู่แล้วลองใหม่",true);return}
   if(c==="session_expired"){setStatus("ต้องเข้าสู่ระบบ Claude ใหม่ก่อนอ่านรูป",true);return}
-  setStatus("อ่านรูปไม่สำเร็จ ลองถ่ายใหม่ หรือกรอกข้อมูลรถเอง",true);
+  setStatus("อ่านรูปไม่สำเร็จ ลองถ่ายใหม่ หรือกรอกข้อมูลรถเอง"+(c?" ["+c+(e.message?": "+e.message:"")+"]":""),true);
 }
 
 /* ---------- page 2: 6 program tiles -> drill into options ---------- */
