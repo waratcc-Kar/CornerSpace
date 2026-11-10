@@ -145,7 +145,11 @@ async function api(req, env, url) {
   const u = await authUser(req, env);
   if (u && u.error === "not_configured") return fail(503, "not_configured", "ยังไม่ได้ตั้งค่า Cloudflare Access (ACCESS_TEAM_DOMAIN / ACCESS_AUD) ดูคู่มือ SETUP-CLOUDFLARE.md");
   if (u && u.error === "forbidden") return fail(403, "forbidden", "อีเมลนี้ยังไม่ได้รับสิทธิ์");
-  if (!u) return fail(401, "unauthenticated", "ต้องล็อกอิน");
+  if (!u) {
+    /* ข้อมูลวินิจฉัย (ไม่มีความลับ): ด่าน Access ส่ง JWT มาถึงแอปหรือไม่ */
+    const cookie = req.headers.get("cookie") || "";
+    return json({ error: "unauthenticated", message: "ต้องล็อกอิน", jwtHeader: !!req.headers.get("cf-access-jwt-assertion"), accessCookie: /CF_Authorization=/.test(cookie), host: url.host }, 401);
+  }
   await init(env.DB);
   const parts = url.pathname.split("/").slice(2);      /* /api/<a>/<b>/<c> */
   const m = req.method;

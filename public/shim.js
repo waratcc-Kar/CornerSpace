@@ -23,7 +23,7 @@
         if (!r.ok) {
           var code = (j && j.error) || (r.status === 401 || r.status === 403 ? "unauthenticated" : "error");
           if (r.status === 429) code = "rate_limited";
-          throw { code: code, status: r.status, message: j && j.message };
+          throw { code: code, status: r.status, message: j && j.message, diag: j && j.jwtHeader !== undefined ? "jwt=" + (j.jwtHeader ? 1 : 0) + " cookie=" + (j.accessCookie ? 1 : 0) + " host=" + j.host : "" };
         }
         return j;
       });
@@ -40,6 +40,7 @@
     var msg = e && e.message;
     if (e && e.status === 401) msg = "เซสชันหมดอายุ ให้โหลดหน้าใหม่เพื่อเข้าสู่ระบบอีกครั้ง";
     say(msg || "เชื่อมต่อระบบไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่", true);
+    if (e && e.diag) { var d = document.createElement("div"); d.textContent = e.diag; d.style.cssText = "margin-top:18px;font-size:.75rem;opacity:.5"; document.getElementById("csMsg").appendChild(d); }
   });
 
   function isOwner() { return !!(me && me.owner); }
