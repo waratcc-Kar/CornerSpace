@@ -315,7 +315,7 @@ function thaiNow() {
 }
 
 /* สร้างร่างคำตอบจากประวัติแชต เก็บไว้ในเธรด (ไม่ส่งหาลูกค้า) คืน {ok, draft?, why?} */
-async function makeDraft(env, uid) {
+async function makeDraft(env, uid, img) {
   if (!env.ANTHROPIC_API_KEY) return { ok: false, why: "no_key" };
   const day = "drafts_" + new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
   await env.DB.prepare("INSERT OR IGNORE INTO meta (k, v) VALUES (?1, 0)").bind(day).run();
@@ -343,12 +343,12 @@ async function makeDraft(env, uid) {
   while (turns.length && turns[0].role !== "user") turns.shift();
   if (!turns.length) return { ok: false, why: "no_pending" };
   const SUFFIX = "\n\n(ตอบเป็น JSON บรรทัดเดียวตามรูปแบบที่กำหนดเท่านั้น ห้ามมีข้อความอื่น)";
-  const build = (extra) => turns.map((t, i) => ({
-    role: t.role,
-    content: t.role === "user"
-      ? t.parts.map((x) => "ข้อความลูกค้า: " + x).join("\n") + (i === turns.length - 1 ? gapNote + SUFFIX + extra : "")
-      : JSON.stringify({ reply: t.parts.join("\n"), needs_staff: false, staff_followup: false, reason: "" })
-  }));
+  const build = (extra) => turns.map((t, i) => {
+    const last = i === turns.length - 1;
+    if (t.role !== "user") return { role: t.role, content: JSON.stringify({ reply: t.parts.join("\n"), needs_staff: false, staff_followup: false, reason: "" }) };
+    const txt = t.parts.map((x) => "ข้อความลูกค้า: " + x).join("\n") + (last ? gapNote + (img ? "\n(ลูกค้าส่งรูปภาพมาตามที่แนบ ดูรูปแล้วตอบตามที่เห็นและคุยต่อเรื่องที่กำลังคุย)" : "") + SUFFIX + extra : "");
+    return { role: "user", content: last && img ? [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: txt }] : txt };
+  });
 
   let j = null, text = "", lastErr = "";
   for (let attempt = 0; attempt < 2 && !j; attempt++) {
@@ -428,8 +428,24 @@ async function autoEnabled(env) {
 
 const NEW_ROUND_MS = 30 * 60e3;
 
-async function handleChat(env, uid, replyToken, kind) {
-  const d = await makeDraft(env, uid);
+async function fetchLineImage(env, id) {
+  try {
+    if (!id || !/^\d+$/.test(String(id))) return null;
+    const r = await fetch("https://api-data.line.me/v2/bot/message/" + id + "/content", { headers: { Authorization: "Bearer " + env.LINE_CHANNEL_ACCESS_TOKEN } });
+    if (!r.ok) return null;
+    const type = (r.headers.get("content-type") || "").split(";")[0];
+    if (!/^image\/(jpeg|png|gif|webp)$/.test(type)) return null;
+    const buf = new Uint8Array(await r.arrayBuffer());
+    if (buf.length > 3_500_000) return null;
+    let bin = "";
+    for (let i = 0; i < buf.length; i += 8192) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 8192));
+    return { type, data: btoa(bin) };
+  } catch (e) { return null; }
+}
+
+async function handleChat(env, uid, replyToken, kind, msgId) {
+  const img = kind === "image" && env.LINE_CHANNEL_ACCESS_TOKEN ? await fetchLineImage(env, msgId) : null;
+  const d = await makeDraft(env, uid, img);
   if (!d.ok && d.why && d.why !== "no_pending") {
     await env.DB.prepare("UPDATE chat_threads SET draft_flag = 1, draft_reason = ?2 WHERE user_id = ?1").bind(uid, ("AI ตอบไม่สำเร็จ: " + d.why).slice(0, 300)).run();
   }
@@ -454,7 +470,7 @@ async function handleChat(env, uid, replyToken, kind) {
     await env.DB.prepare("INSERT INTO chat_msgs (user_id, dir, text, ts) VALUES (?1, 'auto', ?2, ?3)").bind(uid, gt, Date.now()).run();
     return;
   }
-  const safe = kind === "text" && !d.flag && d.draft;
+  const safe = (kind === "text" || (kind === "image" && !!img)) && !d.flag && d.draft;
   let text = safe ? greet(d.draft) : d.draft;
   if (!safe) {
     /* ต้องให้พนักงานดู: ส่งข้อความรอสั้นๆ ครั้งเดียวต่อ 10 นาที แล้วปล่อยให้พนักงานตอบต่อ */
@@ -553,7 +569,7 @@ async function lineWebhook(req, env, ctx) {
         } else {
           /* ข้อความทั่วไป: เก็บไว้ให้พนักงานดูในแอป และให้ AI ร่างคำตอบ (ไม่ส่งหาลูกค้าเอง) */
           await logIncoming(env, uid, msgText(ev.message));
-          const job = handleChat(env, uid, ev.replyToken, ev.message.type).catch((e) => console.error("chat failed", e));
+          const job = handleChat(env, uid, ev.replyToken, ev.message.type, ev.message.id).catch((e) => console.error("chat failed", e));
           if (ctx && ctx.waitUntil) ctx.waitUntil(job); else await job;
         }
       }
