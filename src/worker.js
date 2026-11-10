@@ -488,9 +488,9 @@ async function handleChat(env, uid, replyToken, kind, msgId) {
   if (!safe) {
     /* ต้องให้พนักงานดู: ส่งข้อความรอสั้นๆ ครั้งเดียวต่อ 10 นาที แล้วปล่อยให้พนักงานตอบต่อ */
     const recent = await env.DB.prepare("SELECT count(*) AS n FROM chat_msgs WHERE user_id = ?1 AND dir = 'hold' AND ts > ?2").bind(uid, now - 600e3).first();
+    await notifyOwner(env, uid, d.reason);
     if (recent.n > 0) return;
     text = greet(HOLD_TEXT);
-    await notifyOwner(env, uid, d.reason);
   }
   try { await lineReplyOrPush(env, replyToken, uid, text); } catch (e) { console.error("auto reply failed", e); return; }
   await env.DB.prepare("INSERT INTO chat_msgs (user_id, dir, text, ts) VALUES (?1, ?4, ?2, ?3)").bind(uid, text.slice(0, 4900), Date.now(), safe ? "auto" : "hold").run();
