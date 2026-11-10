@@ -436,7 +436,7 @@ async function handleChat(env, uid, replyToken, kind) {
   const cnt = (await env.DB.prepare("SELECT count(*) AS n FROM chat_msgs WHERE user_id = ?1 AND dir IN ('auto','hold') AND ts > ?2").bind(uid, now - 3600e3).first()).n;
   if (cnt >= AUTO_PER_HOUR) return;
   /* ลูกค้าทักมารอบใหม่ (ร้าน/AI ยังไม่ได้ตอบใน 30 นาที) ต้องขึ้นต้นด้วย สวัสดีครับ เสมอ ไม่ว่าลูกค้าจะทักอะไรมา */
-  const lastOut = await env.DB.prepare("SELECT max(ts) AS ts FROM chat_msgs WHERE user_id = ?1 AND dir IN ('auto','hold','out') AND ts < ?2").bind(uid, d.ts || now).first();
+  const lastOut = await env.DB.prepare("SELECT max(ts) AS ts FROM chat_msgs WHERE user_id = ?1 AND dir IN ('auto','hold','out') AND ts <= ?2").bind(uid, d.ts || now).first();
   const newRound = !lastOut || !lastOut.ts || (d.ts || now) - lastOut.ts >= NEW_ROUND_MS;
   const greet = (t) => (newRound && !/^\s*สวัสดี/.test(t) ? "สวัสดีครับ " + t : t);
   if (kind === "sticker") {
