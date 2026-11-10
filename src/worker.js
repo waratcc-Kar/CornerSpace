@@ -352,7 +352,8 @@ async function makeDraft(env, uid) {
 
   let j = null, text = "", lastErr = "";
   for (let attempt = 0; attempt < 2 && !j; attempt++) {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
+    let r;
+    try { r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
@@ -361,7 +362,7 @@ async function makeDraft(env, uid) {
         system: [{ type: "text", text: KB, cache_control: { type: "ephemeral" } }, { type: "text", text: "ตอนนี้: " + thaiNow() }],
         messages: build(attempt ? "\nสำคัญ: ผลลัพธ์ต้องเป็น JSON ที่มีคีย์ reply, needs_staff, reason เท่านั้น เริ่มด้วย { และจบด้วย }" : "")
       })
-    });
+    }); } catch (e) { lastErr = ("fetch " + (e && e.message)).slice(0, 200); break; }
     if (!r.ok) {
       let why = "";
       try { const ej = await r.json(); why = (ej && ej.error && (ej.error.type + ": " + ej.error.message)) || ""; } catch (e) { /* ignore */ }
@@ -428,6 +429,9 @@ const NEW_ROUND_MS = 30 * 60e3;
 
 async function handleChat(env, uid, replyToken, kind) {
   const d = await makeDraft(env, uid);
+  if (!d.ok && d.why && d.why !== "no_pending") {
+    await env.DB.prepare("UPDATE chat_threads SET draft_flag = 1, draft_reason = ?2 WHERE user_id = ?1").bind(uid, ("AI ตอบไม่สำเร็จ: " + d.why).slice(0, 300)).run();
+  }
   if (!d.ok || d.stale) return;
   if (!env.LINE_CHANNEL_ACCESS_TOKEN || !(await autoEnabled(env))) return;
   const now = Date.now();
