@@ -350,8 +350,8 @@ async function makeDraft(env, uid, img) {
     return { role: "user", content: last && img ? [{ type: "image", source: { type: "base64", media_type: img.type, data: img.data } }, { type: "text", text: txt }] : txt };
   });
 
-  let j = null, text = "", lastErr = "";
-  for (let attempt = 0; attempt < 2 && !j; attempt++) {
+  let j = null, text = "", lastErr = "", useSearch = true;
+  for (let attempt = 0; attempt < 3 && !j; attempt++) {
     let r;
     try { r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -359,6 +359,7 @@ async function makeDraft(env, uid, img) {
       body: JSON.stringify({
         model: env.CHAT_MODEL || env.MODEL || DEFAULT_MODEL,
         max_tokens: 4000,
+        ...(useSearch ? { tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }] } : {}),
         system: [{ type: "text", text: KB, cache_control: { type: "ephemeral" } }, { type: "text", text: "ตอนนี้: " + thaiNow() }],
         messages: build(attempt ? "\nสำคัญ: ผลลัพธ์ต้องเป็น JSON ที่มีคีย์ reply, needs_staff, reason เท่านั้น เริ่มด้วย { และจบด้วย }" : "")
       })
@@ -367,6 +368,7 @@ async function makeDraft(env, uid, img) {
       let why = "";
       try { const ej = await r.json(); why = (ej && ej.error && (ej.error.type + ": " + ej.error.message)) || ""; } catch (e) { /* ignore */ }
       lastErr = ("ai " + r.status + " " + why).slice(0, 200);
+      if (useSearch && (r.status === 400 || r.status === 403 || r.status === 404)) { useSearch = false; continue; }
       break;
     }
     const out = await r.json();
