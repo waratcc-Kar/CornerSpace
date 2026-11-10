@@ -9,7 +9,7 @@ const COLLS = new Set(["jobs", "customers", "bookings", "settings"]);
 const LIMITS = { jobs: 500, customers: 2000, bookings: 1000, settings: 20 };
 const MAX_DOC = 1_800_000;             /* D1: 1 แถวไม่เกิน ~2MB */
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
-const DEFAULT_MODEL = "claude-haiku-5-5";   /* ถ้าอ่านลายมือไม่แม่น ตั้งตัวแปร MODEL เป็น claude-sonnet-5-5 */
+const DEFAULT_MODEL = "claude-sonnet-5-5";   /* ถ้าอ่านลายมือไม่แม่น ตั้งตัวแปร MODEL เป็น claude-sonnet-5-5 */
 
 const json = (o, status = 200) =>
   new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
