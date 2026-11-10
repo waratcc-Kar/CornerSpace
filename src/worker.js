@@ -323,10 +323,16 @@ async function makeDraft(env, uid) {
   if (used >= DRAFTS_PER_DAY) return { ok: false, why: "daily_limit" };
   await env.DB.prepare("UPDATE meta SET v = v + 1 WHERE k = ?1").bind(day).run();
 
-  const rs = await env.DB.prepare("SELECT id, dir, text FROM chat_msgs WHERE user_id = ?1 ORDER BY id DESC LIMIT 14").bind(uid).all();
+  const rs = await env.DB.prepare("SELECT id, dir, text, ts FROM chat_msgs WHERE user_id = ?1 ORDER BY id DESC LIMIT 14").bind(uid).all();
   const rows = rs.results.reverse();
   if (!rows.length || rows[rows.length - 1].dir !== "in") return { ok: false, why: "no_pending" };
   const lastId = rows[rows.length - 1].id;
+  /* ถ้าลูกค้าเงียบไปนานก่อนทักใหม่ บอก AI ว่าเป็นการเริ่มบทสนทนาใหม่ ไม่ต้องต่อเรื่องเดิม */
+  let gapNote = "";
+  if (rows.length > 1) {
+    const gapMin = Math.round((rows[rows.length - 1].ts - rows[rows.length - 2].ts) / 60000);
+    if (gapMin >= 30) gapNote = "\n(ระบบแจ้ง: ข้อความนี้ห่างจากข้อความก่อนหน้า " + (gapMin >= 120 ? Math.round(gapMin / 60) + " ชั่วโมง" : gapMin + " นาที") + " ถือเป็นการเริ่มคุยรอบใหม่ ไม่ต้องต่อเรื่องเดิมถ้าลูกค้าแค่ทักทาย)";
+  }
   /* ประวัติแชต: ฝั่งร้านใส่เป็น JSON รูปแบบเดียวกับที่ต้องการให้ตอบ ไม่งั้น AI จะเลียนแบบข้อความธรรมดา */
   const turns = [];
   for (const r of rows) {
@@ -340,8 +346,8 @@ async function makeDraft(env, uid) {
   const build = (extra) => turns.map((t, i) => ({
     role: t.role,
     content: t.role === "user"
-      ? t.parts.map((x) => "ข้อความลูกค้า: " + x).join("\n") + (i === turns.length - 1 ? SUFFIX + extra : "")
-      : JSON.stringify({ reply: t.parts.join("\n"), needs_staff: false, reason: "" })
+      ? t.parts.map((x) => "ข้อความลูกค้า: " + x).join("\n") + (i === turns.length - 1 ? gapNote + SUFFIX + extra : "")
+      : JSON.stringify({ reply: t.parts.join("\n"), needs_staff: false, staff_followup: false, reason: "" })
   }));
 
   let j = null, text = "", lastErr = "";
@@ -374,7 +380,7 @@ async function makeDraft(env, uid) {
   /* ถ้าระหว่างรอ AI ลูกค้าพิมพ์ข้อความใหม่ ร่างนี้เก่าแล้ว ทิ้ง */
   const res = await env.DB.prepare("UPDATE chat_threads SET draft = ?2, draft_flag = ?3, draft_reason = ?4, draft_for = ?5 WHERE user_id = ?1 AND (SELECT max(id) FROM chat_msgs WHERE user_id = ?1) = ?5")
     .bind(uid, reply, flag, reason, lastId).run();
-  return { ok: true, draft: reply, flag: !!flag, reason, stale: !(res.meta && res.meta.changes) };
+  return { ok: true, draft: reply, flag: !!flag, followup: !!(j && j.staff_followup && !j.needs_staff), reason, stale: !(res.meta && res.meta.changes) };
 }
 
 
@@ -438,7 +444,10 @@ async function handleChat(env, uid, replyToken, kind) {
   }
   try { await lineReplyOrPush(env, replyToken, uid, text); } catch (e) { console.error("auto reply failed", e); return; }
   await env.DB.prepare("INSERT INTO chat_msgs (user_id, dir, text, ts) VALUES (?1, ?4, ?2, ?3)").bind(uid, text.slice(0, 4900), Date.now(), safe ? "auto" : "hold").run();
-  if (safe) await env.DB.prepare("UPDATE chat_threads SET draft = '', draft_flag = 0, draft_reason = '', unread = 0, last_text = ?2, last_ts = ?3 WHERE user_id = ?1").bind(uid, ("AI: " + text).slice(0, 200), Date.now()).run();
+  if (safe && d.followup) {
+    /* AI ตอบลูกค้าไปแล้ว แต่เรื่องนี้ (เช่น ขอคิว) ต้องให้พนักงานรับช่วงต่อ: คงสถานะ ต้องดูเอง ไว้ */
+    await env.DB.prepare("UPDATE chat_threads SET draft = '', draft_flag = 1, draft_reason = ?4, unread = CASE WHEN unread > 0 THEN unread ELSE 1 END, last_text = ?2, last_ts = ?3 WHERE user_id = ?1").bind(uid, ("AI: " + text).slice(0, 200), Date.now(), (d.reason || "ลูกค้าขอคิว/นัดหมาย ให้พนักงานเช็กคิวและยืนยัน").slice(0, 300)).run();
+  } else if (safe) await env.DB.prepare("UPDATE chat_threads SET draft = '', draft_flag = 0, draft_reason = '', unread = 0, last_text = ?2, last_ts = ?3 WHERE user_id = ?1").bind(uid, ("AI: " + text).slice(0, 200), Date.now()).run();
 }
 
 async function chatsApi(req, env, parts, m) {

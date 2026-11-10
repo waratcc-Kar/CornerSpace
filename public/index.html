@@ -712,7 +712,7 @@ function renderChatOpen(box,fresh){
   var ta=$("#chText"),keep=ta&&!fresh&&ta.value&&ta.value!==(CH.draftShown||"")?ta.value:null;
   var h='<div class="filters"><button type="button" class="btn ghost sm" id="chBack">← กลับ</button><b style="align-self:center">'+esc(t.name||"ลูกค้า LINE")+(t.phone?' · '+esc(t.phone):"")+'</b></div>';
   h+='<div id="chMsgs">'+CH.msgs.map(function(m){return '<div class="bub'+(m.dir!=="in"?" out":"")+'">'+esc(m.text)+'<small>'+(m.dir==="auto"||m.dir==="hold"?"AI ตอบอัตโนมัติ · ":"")+esc(chTime(m.ts))+'</small></div>'}).join("")+'</div>';
-  if(t.draft&&t.flag)h+='<div class="chatwarn"><b>ต้องให้พนักงานดูเอง</b>'+(t.reason?' · '+esc(t.reason):"")+'</div>';
+  if(t.flag&&(t.draft||t.reason))h+='<div class="chatwarn"><b>ต้องให้พนักงานดูเอง</b>'+(t.reason?' · '+esc(t.reason):"")+'</div>';
   h+='<label class="f"><span>'+(t.draft?"ร่างคำตอบจาก AI (แก้ไขได้ก่อนส่ง)":"พิมพ์ข้อความตอบลูกค้า")+'</span><textarea class="in" id="chText" rows="6" placeholder="พิมพ์ข้อความ…"></textarea></label>';
   h+='<div class="filters"><button type="button" class="btn blue sm" id="chSend">ส่งเข้า LINE</button><button type="button" class="btn ghost sm" id="chRegen">ให้ AI ร่างใหม่</button><button type="button" class="btn ghost sm" id="chDismiss">ปิดเรื่อง (ไม่ตอบ)</button></div>';
   var pz=t.paused_until&&t.paused_until>Date.now();
