@@ -357,7 +357,7 @@ async function makeDraft(env, uid) {
       headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: env.CHAT_MODEL || env.MODEL || DEFAULT_MODEL,
-        max_tokens: 900,
+        max_tokens: 1500,
         system: [{ type: "text", text: KB, cache_control: { type: "ephemeral" } }, { type: "text", text: "ตอนนี้: " + thaiNow() }],
         messages: build(attempt ? "\nสำคัญ: ผลลัพธ์ต้องเป็น JSON ที่มีคีย์ reply, needs_staff, reason เท่านั้น เริ่มด้วย { และจบด้วย }" : "")
       })
