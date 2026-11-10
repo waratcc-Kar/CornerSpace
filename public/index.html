@@ -304,7 +304,7 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
         <button type="button" class="fchip" data-k="moto" aria-pressed="false">มอเตอร์ไซค์</button>
       </div>
       <div class="fields">
-        <label class="f"><span>ทะเบียนรถ</span><input class="in" id="plate" autocomplete="off" placeholder="เช่น 1กก 1234"></label>
+        <label class="f"><span>ทะเบียนรถ</span><input class="in" id="plate" autocomplete="off" placeholder="เช่น 1กก 1234 / ป้ายแดง (เว้นว่างได้ถ้ายังไม่มีป้าย)"></label>
         <label class="f"><span>จังหวัดบนป้ายทะเบียน</span><input class="in" id="prov" autocomplete="off" placeholder="เช่น สระบุรี"></label>
         <label class="f"><span>สีรถ</span><input class="in" id="color" autocomplete="off"></label>
       </div>
@@ -671,7 +671,6 @@ function setTab(t){
 function goPage(n){
   if(n===1&&S.editJobId){toast("แก้ไขข้อมูลรถและลูกค้าไม่ได้ แก้ไขได้เฉพาะโปรแกรมที่ทำ");return}
   if(n===2){
-    if(!$("#plate").value.trim()){toast("กรอกทะเบียนรถก่อน");$("#plate").focus();return}
     if(!S.ctx){toast(S.kind==="moto"?"ใส่ขนาดเครื่องยนต์ (cc) ก่อน":"เลือกรุ่นรถก่อน");return}
     if(!$("#cname").value.trim()||!$("#phone").value.trim()){
       toast("บันทึกชื่อและเบอร์โทรลูกค้าก่อน");S.ncShow=!$("#manualWrap").hidden?S.ncShow:true;renderPage();
@@ -1013,9 +1012,9 @@ var sampleReady=Promise.resolve().then(function(){return window.claude&&window.c
 }).then(function(l){S.photoOK=!!(sampleFn&&l&&l.images);S.maxImg=Math.min(3,(l&&l.images&&l.images.maxCount)||3);renderPhoto()}).catch(function(){S.photoOK=false;renderPhoto()});
 var PROMPT=[
  "These are 1 to 3 photos of ONE customer's vehicle at a car detailing shop in Thailand. They may show the whole vehicle, its licence plate, and a small white Corner Space warranty sticker (usually inside the door frame) with handwritten fields: Warranty (the program name, e.g. Butterfly+, with the number of years in brackets), Expiry Date (day-month-year; the year is usually 2 digits in the Thai Buddhist calendar, e.g. 71 means 2571). The Contact number printed on the sticker is the shop's own: ignore it.",
- 'Reply with only one JSON object: {"kind":"car"|"motorcycle"|"unknown","brand":string|null,"model":string|null,"plate":string|null,"province":string|null,"cc":number|null,"color":string|null,"confidence":"high"|"medium"|"low","warranty":{"program":string|null,"years":number|null,"expiry":{"d":number,"m":number,"y":number}|null}|null}.',
+ 'Reply with only one JSON object: {"kind":"car"|"motorcycle"|"unknown","brand":string|null,"model":string|null,"plate":string|null,"plate_type":"red"|"normal"|"none"|"unknown","province":string|null,"cc":number|null,"color":string|null,"confidence":"high"|"medium"|"low","warranty":{"program":string|null,"years":number|null,"expiry":{"d":number,"m":number,"y":number}|null}|null}.',
  "brand and model: as sold in Thailand, in English letters (for example Honda and Civic, Honda and CR-V, Toyota and Hilux Revo, Mercedes-Benz and GLC).",
- "plate: the Thai licence plate characters and digits exactly as printed (for example 1กข 1234 or กษ 9941), without the province line (the province goes in the province field). Use null when the plate is not clearly legible. Never guess a plate.",
+ "plate: the Thai licence plate characters and digits exactly as printed (for example 1กข 1234 or กษ 9941), without the province line (the province goes in the province field). Use null when the plate is not clearly legible. Never guess a plate. plate_type: \"red\" when the plate has a red background (a temporary dealer plate on a new car, usually with a red Thai-letter-and-digits number); \"normal\" for any other plate; \"none\" when the front or rear of the vehicle is clearly visible and has no plate fitted at all (new car from a showroom); \"unknown\" when you cannot tell.",
  "cc: for a motorcycle, the engine displacement in cc if you can tell it from the model, otherwise null. Use null for cars.",
  "province: the province name printed under the plate number on the plate, in Thai (for example สระบุรี), or null if not legible.",
  "color: the body colour in Thai (for example ขาว, ดำ, เทา).",
@@ -1114,6 +1113,7 @@ function applyPhoto(r){
     if(c){pickCar(c);found=c.b+" "+c.m;parts0.found=1}
     else{$("#carQ").value=(brand+" "+model).trim();customCar();found=S.car.label}
   }
+  if(r.plate_type==="red")plate=("ป้ายแดง "+plate).trim();
   if(plate&&!$("#plate").value.trim())$("#plate").value=plate;
   var prv=String(r.province||"").trim();if(prv&&!$("#prov").value.trim())$("#prov").value=prv;
   if(color&&!$("#color").value.trim())$("#color").value=color;
@@ -1313,7 +1313,7 @@ function renderBar(){
   $("#barSub").textContent=t.missing?("ยอดรวม · ยังไม่ใส่ราคา "+t.missing+" รายการ"):"ยอดรวม";
   $("#saveBtn").disabled=S.saving;
   var pl=$("#plate").value.trim();
-  $("#b1main").textContent=(pl||"ยังไม่กรอกทะเบียน")+" · "+(S.car?S.car.label:"ยังไม่ได้เลือกรถ");
+  $("#b1main").textContent=(pl||"ไม่มีทะเบียน")+" · "+(S.car?S.car.label:"ยังไม่ได้เลือกรถ");
 }
 var CAM_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
 function shrinkToDataUrl(file,maxDim,q){
@@ -1368,7 +1368,6 @@ function jobNo(){
 function saveJob(){
   if(S.saving)return;
   var plate=$("#plate").value.trim();
-  if(!plate){goPage(1);toast("กรอกทะเบียนรถก่อนบันทึก");return}
   if(!S.ctx){goPage(1);toast(S.kind==="moto"?"ใส่ขนาดเครื่องยนต์ (cc) ก่อนบันทึก":"เลือกรุ่นรถก่อนบันทึก");return}
   if(!S.lines.length){toast("เลือกโปรแกรมอย่างน้อย 1 รายการ");return}
   var t=totals();
