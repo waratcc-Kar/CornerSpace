@@ -1,0 +1,16 @@
+{
+  // Corner Space — Cloudflare Worker + หน้าเว็บ (public/) + ฐานข้อมูล D1
+  "name": "cornerspace",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-09-01",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cornerspace",
+      "database_id": "ใส่-database-id-จาก-Cloudflare"
+    }
+  ],
+  // เตือนนัดบริการ: 02:00 UTC = 09:00 เวลาไทย
+  "triggers": { "crons": ["0 2 * * *"] }
+}

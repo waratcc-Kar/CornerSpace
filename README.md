@@ -1,10 +1,12 @@
 # Corner Space
 
-ระบบรับรถและจัดการงานคิว สำหรับร้าน Corner Space (คาร์ดีเทลลิ่ง ฟิล์มกรองแสง ฟิล์มใสกันรอย)
+ระบบรับรถ คิวงาน นัดบริการ ฟิล์มกรองแสง/PPF/คาร์แคร์ของร้าน Corner Space (LINE OA @cs2016)
 
-- `public/` : เว็บแอป (index.html ไฟล์เดียว + ตัวเชื่อม Firebase `shim.js` + `config.js`)
-- `functions/` : Cloud Functions (อ่านรูปด้วย Claude, ส่ง/รับ LINE, เตือนนัดบริการ)
-- `firestore.rules` : กฎความปลอดภัย (พนักงานในรายชื่อเท่านั้น, ราคาแก้ได้เฉพาะเจ้าของ)
-- `SETUP.md` : **คู่มือตั้งค่าและนำขึ้นระบบ (เริ่มที่นี่)**
+- หน้าเว็บ: `public/` (ไฟล์เดียว `index.html` + `shim.js`)
+- หลังบ้าน: `src/worker.js` — Cloudflare Worker + ฐานข้อมูล D1
+  - ล็อกอินพนักงานด้วย Cloudflare Access (รหัสทางอีเมล) และ Worker ตรวจ JWT ซ้ำ
+  - อ่านรูปรถ/ป้ายประกันด้วย Claude (คีย์เป็น secret ไม่อยู่ในหน้าเว็บ)
+  - ส่งข้อความ/รับ webhook ของ LINE OA และเตือนนัดทุกวัน 09:00 เวลาไทย
+- ตั้งค่าตามขั้นตอนใน **[SETUP-CLOUDFLARE.md](SETUP-CLOUDFLARE.md)** (ไม่ต้องใช้คำสั่ง เชื่อม GitHub แล้วกดตามหน้าเว็บ)
 
-LINE OA ของร้าน: @cs2016 (เพิ่มเพื่อน: https://line.me/R/ti/p/%40cs2016)
+ชุด Firebase รุ่นก่อนหน้าอยู่ใน git history (commit `f9b957d`) ไม่ได้ใช้แล้ว
