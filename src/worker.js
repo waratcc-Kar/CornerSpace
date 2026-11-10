@@ -382,18 +382,35 @@ async function makeDraft(env, uid) {
 const HOLD_TEXT = "รับเรื่องแล้วครับ ทีมงานจะรีบตอบกลับโดยเร็วที่สุด\nเวลาทำการ จันทร์–เสาร์ 08:00–17:30 ครับ";
 const AUTO_PER_HOUR = 12;
 
+/* ข้อความยาวแยกเป็นหลายบับเบิลตามย่อหน้า (สูงสุด 4) ให้อ่านเหมือนคนพิมพ์ทีละท่อน */
+function splitBubbles(text) {
+  const parts = String(text).split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean);
+  const out = [];
+  for (const p of parts) {
+    if (out.length < 4) out.push(p);
+    else out[3] += "\n\n" + p;
+  }
+  return (out.length ? out : [String(text)]).map((t) => ({ type: "text", text: t.slice(0, 4900) }));
+}
+
 async function lineReplyOrPush(env, replyToken, uid, text) {
+  const messages = splitBubbles(text);
   if (replyToken) {
     try {
       const r = await fetch("https://api.line.me/v2/bot/message/reply", {
         method: "POST",
         headers: { "content-type": "application/json", Authorization: "Bearer " + env.LINE_CHANNEL_ACCESS_TOKEN },
-        body: JSON.stringify({ replyToken, messages: [{ type: "text", text: String(text).slice(0, 4900) }] })
+        body: JSON.stringify({ replyToken, messages })
       });
       if (r.ok) return;
     } catch (e) { /* ลอง push ต่อ */ }
   }
-  await linePush(env, uid, text);
+  const r = await fetch("https://api.line.me/v2/bot/message/push", {
+    method: "POST",
+    headers: { "content-type": "application/json", Authorization: "Bearer " + env.LINE_CHANNEL_ACCESS_TOKEN },
+    body: JSON.stringify({ to: uid, messages })
+  });
+  if (!r.ok) throw new Error("LINE " + r.status + " " + (await r.text()));
 }
 
 async function autoEnabled(env) {
