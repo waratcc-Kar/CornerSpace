@@ -327,37 +327,48 @@ async function makeDraft(env, uid) {
   const rows = rs.results.reverse();
   if (!rows.length || rows[rows.length - 1].dir !== "in") return { ok: false, why: "no_pending" };
   const lastId = rows[rows.length - 1].id;
-  const msgs = [];
+  /* ประวัติแชต: ฝั่งร้านใส่เป็น JSON รูปแบบเดียวกับที่ต้องการให้ตอบ ไม่งั้น AI จะเลียนแบบข้อความธรรมดา */
+  const turns = [];
   for (const r of rows) {
     const role = r.dir === "in" ? "user" : "assistant";
-    const text = r.dir === "in" ? "ข้อความลูกค้า: " + r.text : r.text;
-    if (msgs.length && msgs[msgs.length - 1].role === role) msgs[msgs.length - 1].content += "\n" + text;
-    else msgs.push({ role, content: text });
+    if (turns.length && turns[turns.length - 1].role === role) turns[turns.length - 1].parts.push(r.text);
+    else turns.push({ role, parts: [r.text] });
   }
-  while (msgs.length && msgs[0].role !== "user") msgs.shift();
-  if (!msgs.length) return { ok: false, why: "no_pending" };
+  while (turns.length && turns[0].role !== "user") turns.shift();
+  if (!turns.length) return { ok: false, why: "no_pending" };
+  const SUFFIX = "\n\n(ตอบเป็น JSON บรรทัดเดียวตามรูปแบบที่กำหนดเท่านั้น ห้ามมีข้อความอื่น)";
+  const build = (extra) => turns.map((t, i) => ({
+    role: t.role,
+    content: t.role === "user"
+      ? t.parts.map((x) => "ข้อความลูกค้า: " + x).join("\n") + (i === turns.length - 1 ? SUFFIX + extra : "")
+      : JSON.stringify({ reply: t.parts.join("\n"), needs_staff: false, reason: "" })
+  }));
 
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({
-      model: env.CHAT_MODEL || env.MODEL || DEFAULT_MODEL,
-      max_tokens: 900,
-      system: [{ type: "text", text: KB, cache_control: { type: "ephemeral" } }, { type: "text", text: "ตอนนี้: " + thaiNow() }],
-      messages: msgs
-    })
-  });
-  if (!r.ok) {
-    let why = "";
-    try { const ej = await r.json(); why = (ej && ej.error && (ej.error.type + ": " + ej.error.message)) || ""; } catch (e) { /* ignore */ }
-    return { ok: false, why: ("ai " + r.status + " " + why).slice(0, 200) };
+  let j = null, text = "", lastErr = "";
+  for (let attempt = 0; attempt < 2 && !j; attempt++) {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: env.CHAT_MODEL || env.MODEL || DEFAULT_MODEL,
+        max_tokens: 900,
+        system: [{ type: "text", text: KB, cache_control: { type: "ephemeral" } }, { type: "text", text: "ตอนนี้: " + thaiNow() }],
+        messages: build(attempt ? "\nสำคัญ: ผลลัพธ์ต้องเป็น JSON ที่มีคีย์ reply, needs_staff, reason เท่านั้น เริ่มด้วย { และจบด้วย }" : "")
+      })
+    });
+    if (!r.ok) {
+      let why = "";
+      try { const ej = await r.json(); why = (ej && ej.error && (ej.error.type + ": " + ej.error.message)) || ""; } catch (e) { /* ignore */ }
+      lastErr = ("ai " + r.status + " " + why).slice(0, 200);
+      break;
+    }
+    const out = await r.json();
+    text = (out.content || []).map((c) => c.text || "").join("");
+    const mm = text.match(/\{[\s\S]*\}/);
+    if (mm) { try { const o = JSON.parse(mm[0]); if (o && typeof o.reply === "string") j = o; } catch (e) { /* ลองใหม่ */ } }
   }
-  const out = await r.json();
-  const text = (out.content || []).map((c) => c.text || "").join("");
-  let j = null;
-  const mm = text.match(/\{[\s\S]*\}/);
-  if (mm) { try { j = JSON.parse(mm[0]); } catch (e) { /* ใช้ข้อความดิบด้านล่าง */ } }
-  const reply = String(j && typeof j.reply === "string" ? j.reply : text).trim().slice(0, 4000);
+  if (!j && !text) return { ok: false, why: lastErr || "ai_empty" };
+  const reply = String(j ? j.reply : text).trim().slice(0, 4000);
   const flag = j ? (j.needs_staff ? 1 : 0) : 1;
   const reason = String((j && j.reason) || (j ? "" : "AI ตอบรูปแบบไม่ตรง ตรวจข้อความก่อนส่ง")).slice(0, 300);
   /* ถ้าระหว่างรอ AI ลูกค้าพิมพ์ข้อความใหม่ ร่างนี้เก่าแล้ว ทิ้ง */
@@ -404,7 +415,7 @@ async function handleChat(env, uid, replyToken, kind) {
   let text = d.draft;
   if (!safe) {
     /* ต้องให้พนักงานดู: ส่งข้อความรอสั้นๆ ครั้งเดียวต่อ 10 นาที แล้วปล่อยให้พนักงานตอบต่อ */
-    const recent = await env.DB.prepare("SELECT count(*) AS n FROM chat_msgs WHERE user_id = ?1 AND dir IN ('hold','out') AND ts > ?2").bind(uid, now - 600e3).first();
+    const recent = await env.DB.prepare("SELECT count(*) AS n FROM chat_msgs WHERE user_id = ?1 AND dir = 'hold' AND ts > ?2").bind(uid, now - 600e3).first();
     if (recent.n > 0) return;
     text = HOLD_TEXT;
   }
