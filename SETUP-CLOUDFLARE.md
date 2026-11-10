@@ -11,6 +11,8 @@
 
 ## 1) สร้างฐานข้อมูล (D1)
 
+> ✅ สร้างไว้แล้วชื่อ `cornerspace` และใส่ ID ใน `wrangler.jsonc` แล้ว ข้ามไปข้อ 2 ได้เลย (ข้อความด้านล่างไว้ใช้ถ้าต้องสร้างใหม่)
+
 1. เข้า dash.cloudflare.com → เมนูซ้าย **Storage & databases → D1 SQL database** → **Create database**
 2. ตั้งชื่อ `cornerspace` เลือกพื้นที่ใกล้ไทย (Asia-Pacific) → Create
 3. คัดลอก **Database ID** (ข้อความยาวๆ หน้าฐานข้อมูล)
@@ -21,15 +23,15 @@
 ## 2) นำแอปขึ้นระบบ (เชื่อม GitHub)
 
 1. Cloudflare → **Workers & Pages → Create → Import a repository** (หรือ Connect to Git) → อนุญาต GitHub → เลือก repo `CornerSpace`
-2. ชื่อโปรเจกต์: `cornerspace` (ต้องตรงกับ `name` ใน `wrangler.jsonc`)
+2. ชื่อโปรเจกต์: `corner-space` (ต้องตรงกับ `name` ใน `wrangler.jsonc`; ถ้ามี Worker ชื่อนี้อยู่แล้วให้เปิดอันเดิม แล้วไปที่ Settings → Builds → Connect เลือก repo)
 3. ช่อง Build command เว้นว่าง ส่วน Deploy command ใช้ค่าเริ่มต้น (`npx wrangler deploy`) → **Save and Deploy**
-4. รอจนขึ้นว่า Deployed จะได้ลิงก์ `cornerspace.<ชื่อ>.workers.dev` (ตอนนี้ยังเปิดใช้ไม่ได้ เพราะยังไม่ได้ตั้งล็อกอิน ทำข้อ 3–4 ต่อ)
+4. รอจนขึ้นว่า Deployed จะได้ลิงก์ `corner-space.<ชื่อ>.workers.dev` (ตอนนี้ยังเปิดใช้ไม่ได้ เพราะยังไม่ได้ตั้งล็อกอิน ทำข้อ 3–4 ต่อ)
 
 หลังจากนี้ทุกครั้งที่แก้ไฟล์ใน GitHub ระบบจะนำขึ้นใหม่ให้อัตโนมัติ
 
 ## 3) ผูกชื่อเว็บ (โดเมน)
 
-Worker `cornerspace` → **Settings → Domains & Routes → Add → Custom domain** → ใส่ `cs.karnet.org` → Add
+Worker `corner-space` → **Settings → Domains & Routes → Add → Custom domain** → ใส่ `cs.karnet.org` → Add
 (ใช้ชื่ออะไรก็ได้ที่เป็นของโดเมนเรา เช่น `app.karnet.org`)
 
 จากนั้นที่หัวข้อเดียวกัน หา **workers.dev** แล้วกด **Disable** เพื่อปิดทางเข้าอื่น ให้เหลือเฉพาะชื่อเว็บของร้าน
@@ -51,7 +53,7 @@ Worker `cornerspace` → **Settings → Domains & Routes → Add → Custom doma
 
 ## 5) ใส่รหัสและค่าตั้งต้น
 
-Worker `cornerspace` → **Settings → Variables and Secrets → Add** (เลือกชนิด **Secret** ทุกตัว) แล้วกด **Deploy** ตอนท้าย
+Worker `corner-space` → **Settings → Variables and Secrets → Add** (เลือกชนิด **Secret** ทุกตัว) แล้วกด **Deploy** ตอนท้าย
 
 | ชื่อ | ค่า |
 |---|---|
