@@ -432,7 +432,7 @@ const NEW_ROUND_MS = 30 * 60e3;
 async function notifyOwner(env, uid, why) {
   try {
     const cfg = await getDoc(env, "settings", "ai");
-    const ids = (cfg && Array.isArray(cfg.notify) ? cfg.notify : []).filter((x) => UID_RE.test(String(x)) && x !== uid).slice(0, 5);
+    const ids = (cfg && Array.isArray(cfg.notify) ? cfg.notify : []).filter((x) => UID_RE.test(String(x))).slice(0, 5);
     if (!ids.length) return;
     const th = await env.DB.prepare("SELECT name FROM chat_threads WHERE user_id = ?1").bind(uid).first();
     const last = await env.DB.prepare("SELECT text FROM chat_msgs WHERE user_id = ?1 AND dir = 'in' ORDER BY id DESC LIMIT 1").bind(uid).first();
