@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>สอบถามสินค้า | Corner Space</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,"Noto Sans Thai",sans-serif;background:#f4f5f7;color:#1c1f24;display:flex;flex-direction:column;height:100dvh}
+header{background:#111;color:#fff;padding:12px 16px}header b{font-size:17px}header small{display:block;opacity:.7}
+#log{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:8px}
+.m{max-width:85%;padding:9px 13px;border-radius:16px;white-space:pre-wrap;word-break:break-word}
+.u{align-self:flex-end;background:#06c755;color:#fff;border-bottom-right-radius:4px}
+.a{align-self:flex-start;background:#fff;border:1px solid #e1e4e8;border-bottom-left-radius:4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px}
+.chips button{border:1px solid #c9ced6;background:#fff;border-radius:999px;padding:7px 12px;font:inherit;font-size:14px}
+form{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #e1e4e8}
+input{flex:1;min-width:0;border:1px solid #c9ced6;border-radius:999px;padding:10px 14px;font:inherit}
+form button{border:0;background:#06c755;color:#fff;border-radius:999px;padding:0 18px;font:inherit;font-weight:600}
+form button:disabled{opacity:.5}
+.foot{text-align:center;font-size:12px;color:#6b7280;padding:4px 12px}.foot a{color:#06a847}
+</style></head><body>
+<header><b>Corner Space บุรีรัมย์</b><small>สอบถามฟิล์มกรองแสง ฟิล์มกันรอย เคลือบเซรามิค ล้างรถ</small></header>
+<div id="log"></div>
+<div class="chips" id="chips">
+<button>สนใจฟิล์มกรองแสง</button><button>สนใจฟิล์มกันรอย PPF</button><button>เคลือบเซรามิคราคาเท่าไร</button><button>ร้านเปิดกี่โมง อยู่ตรงไหน</button></div>
+<div class="foot">ตอบโดยผู้ช่วยอัตโนมัติ · ยืนยันคิวและราคาจริงทางไลน์ <a href="https://line.me/R/ti/p/@cs2016">@cs2016</a></div>
+<form id="f"><input id="q" placeholder="พิมพ์คำถาม เช่น Civic ติดฟิล์มราคาเท่าไร" maxlength="500" autocomplete="off"><button id="s">ส่ง</button></form>
+<script>
+const log=document.getElementById("log"),q=document.getElementById("q"),s=document.getElementById("s"),chips=document.getElementById("chips");
+let hist=[],busy=false;
+function add(r,t){const d=document.createElement("div");d.className="m "+(r==="user"?"u":"a");d.textContent=t;log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
+add("assistant","สวัสดีครับ ยินดีต้อนรับสู่ Corner Space ครับ สนใจสอบถามเรื่องไหน พิมพ์ถามได้เลยครับ");
+async function send(t){
+  t=t.trim();if(!t||busy)return;busy=true;s.disabled=true;chips.hidden=true;q.value="";
+  add("user",t);hist.push({role:"user",text:t});
+  const w=add("assistant","กำลังพิมพ์…");
+  try{
+    const r=await fetch("/pub/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({messages:hist.slice(-10)})});
+    const j=await r.json();const rep=j.reply||"ขออภัยครับ ลองใหม่อีกครั้ง หรือทักไลน์ @cs2016 ครับ";
+    w.textContent=rep;hist.push({role:"assistant",text:rep});
+  }catch(e){w.textContent="เชื่อมต่อไม่ได้ ลองใหม่หรือทักไลน์ @cs2016 ครับ";hist.pop()}
+  busy=false;s.disabled=false;log.scrollTop=log.scrollHeight;
+}
+document.getElementById("f").onsubmit=e=>{e.preventDefault();send(q.value)};
+chips.onclick=e=>{if(e.target.tagName==="BUTTON")send(e.target.textContent)};
+</script></body></html>

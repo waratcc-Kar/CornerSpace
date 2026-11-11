@@ -622,10 +622,60 @@ async function dailyReminders(env) {
   }
 }
 
+
+/* ===== ช่องสอบถามสาธารณะ (/pub) : ไม่ต้องล็อกอิน ไม่เก็บแชต ไม่เข้าถึงข้อมูลร้าน ===== */
+const PUB_PER_HOUR = 15, PUB_PER_DAY = 600;
+async function pubBump(env, key, cap) {
+  await env.DB.prepare("INSERT OR IGNORE INTO meta (k, v) VALUES (?1, 0)").bind(key).run();
+  await env.DB.prepare("UPDATE meta SET v = v + 1 WHERE k = ?1").bind(key).run();
+  const v = (await env.DB.prepare("SELECT v FROM meta WHERE k = ?1").bind(key).first()).v;
+  return v <= cap;
+}
+async function pubAsk(req, env) {
+  const J = (o, st) => new Response(JSON.stringify(o), { status: st || 200, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+  if (req.method !== "POST") return J({ error: "method" }, 405);
+  await init(env.DB);
+  if (!env.ANTHROPIC_API_KEY) return J({ reply: "ระบบสอบถามออนไลน์ยังไม่พร้อม ทักไลน์ @cs2016 ได้เลยครับ" });
+  let body; try { body = await req.json(); } catch (e) { return J({ error: "bad" }, 400); }
+  const msgs = (Array.isArray(body.messages) ? body.messages : []).slice(-10)
+    .map((m) => ({ role: m && m.role === "assistant" ? "assistant" : "user", text: String((m && m.text) || "").slice(0, 600) }))
+    .filter((m) => m.text.trim());
+  while (msgs.length && msgs[0].role !== "user") msgs.shift();
+  if (!msgs.length || msgs[msgs.length - 1].role !== "user") return J({ error: "bad" }, 400);
+  const ip = req.headers.get("cf-connecting-ip") || "x";
+  const hb = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("pub|" + ip)));
+  const ih = Array.from(hb.slice(0, 8)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const t = new Date(Date.now() + 7 * 3600e3).toISOString();
+  if (!(await pubBump(env, "pubip_" + ih + "_" + t.slice(0, 13), PUB_PER_HOUR)) || !(await pubBump(env, "pubday_" + t.slice(0, 10), PUB_PER_DAY)))
+    return J({ reply: "ตอนนี้มีคนสอบถามเยอะ รบกวนทักไลน์ @cs2016 ได้เลยครับ ทีมงานตอบให้ครับ", limited: true });
+  const SUFFIX = "\n\n(ตอบเป็น JSON บรรทัดเดียวตามรูปแบบที่กำหนดเท่านั้น ห้ามมีข้อความอื่น)";
+  const note = "(ระบบแจ้ง: ลูกค้าถามผ่านหน้าเว็บสอบถามสินค้า ไม่ใช่แชตไลน์ ไม่มีรูป และไม่มีทีมงานรออยู่ในแชตนี้ ตอบเรื่องสินค้า/บริการ/ราคาตามข้อมูลที่มี ห้ามบอกว่าทีมงานจะตอบในหน้านี้ ถ้าต้องให้ทีมงานช่วย ให้ชวนทักไลน์ @cs2016 หรือฝากเบอร์โทร ห้ามยืนยันคิว ห้ามให้ส่วนลด)\n";
+  const messages = msgs.map((m, i) => m.role === "assistant"
+    ? { role: "assistant", content: JSON.stringify({ reply: m.text, needs_staff: false, staff_followup: false, reason: "" }) }
+    : { role: "user", content: (i === msgs.length - 1 ? note : "") + "ข้อความลูกค้า: " + m.text + (i === msgs.length - 1 ? SUFFIX : "") });
+  let reply = "";
+  for (let a = 0; a < 2 && !reply; a++) {
+    let r; try { r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: env.CHAT_MODEL || env.MODEL || DEFAULT_MODEL, max_tokens: 2000,
+        system: [{ type: "text", text: KB, cache_control: { type: "ephemeral" } }, { type: "text", text: "ตอนนี้: " + thaiNow() }], messages })
+    }); } catch (e) { break; }
+    if (!r.ok) break;
+    const out = await r.json();
+    const text = (out.content || []).map((c) => c.text || "").join("");
+    const mm = text.match(/\{[\s\S]*\}/);
+    if (mm) { try { const o = JSON.parse(mm[0]); if (o && typeof o.reply === "string") reply = o.reply.trim().slice(0, 2000); } catch (e) { /* ลองใหม่ */ } }
+  }
+  if (!reply) reply = "ขออภัยครับ ระบบขัดข้องชั่วคราว ทักไลน์ @cs2016 ได้เลยครับ";
+  return J({ reply });
+}
+
 export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
     try {
+      if (url.pathname === "/pub/ask") return await pubAsk(req, env);
       if (url.pathname === "/line-webhook") return await lineWebhook(req, env, ctx);
       if (url.pathname.startsWith("/api/")) return await api(req, env, url);
     } catch (e) {
