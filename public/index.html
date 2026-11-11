@@ -793,6 +793,7 @@ function setTab(t){
   if(t==="chat"){chPoll();renderChat()}
 }
 function goPage(n){
+  if(n===1&&S.editJobId&&!S.owner){toast("เฉพาะเจ้าของร้านแก้ไขรุ่น/ไซส์รถได้");return}
   if(n===2){
     if(!S.ctx){toast(S.kind==="moto"?"ใส่ขนาดเครื่องยนต์ (cc) ก่อน":"เลือกรุ่นรถก่อน");return}
     if(!$("#cname").value.trim()||!$("#phone").value.trim()){
@@ -840,7 +841,7 @@ function renderPage(){
   ["plate","prov","color","cname","phone","member","ncName","ncPhone"].forEach(function(i){var e=$("#"+i);if(e)e.disabled=!!S.editJobId});
   $$("#kind button").forEach(function(b){b.disabled=!!S.editJobId});
   var eb=$("#editBanner");eb.hidden=!S.editJobId;
-  if(S.editJobId){var ej=S.jobs.filter(function(x){return x.id===S.editJobId})[0];$("#editBannerTx").textContent="แก้ไขใบ "+(ej?ej.no:"")+" · แก้รุ่น/ไซส์รถได้ที่ปุ่ม แก้ไขข้อมูลรถ · ข้อมูลลูกค้าแก้ไม่ได้ · ลบโปรแกรมเดิมไม่ได้ แต่เปลี่ยนเป็นโปรแกรมอื่น เพิ่ม หรือแก้ราคาได้"}
+  if(S.editJobId){var ej=S.jobs.filter(function(x){return x.id===S.editJobId})[0];$("#editBannerTx").textContent="แก้ไขใบ "+(ej?ej.no:"")+(S.owner?" · แก้รุ่น/ไซส์รถได้ที่ปุ่ม แก้ไขข้อมูลรถ":" · แก้รุ่น/ไซส์รถได้เฉพาะเจ้าของร้าน")+" · ข้อมูลลูกค้าแก้ไม่ได้ · ลบโปรแกรมเดิมไม่ได้ แต่เปลี่ยนเป็นโปรแกรมอื่น เพิ่ม หรือแก้ราคาได้"}
   $("#saveBtn").textContent=S.editJobId?"บันทึกการแก้ไข":"บันทึกใบรับรถ";
   $("#st1").setAttribute("aria-current",S.page===1?"step":"false");
   $("#st2").setAttribute("aria-current",S.page===2?"step":"false");
@@ -1403,7 +1404,7 @@ function renderCtx(){
   if(S.page!==2||!S.ctx){el.innerHTML="";return}
   var tags=S.kind==="moto"?'<span class="tag">มอเตอร์ไซค์ '+S.ctx.cc+" cc</span>":
     '<span class="tag">ล้าง '+WASH[S.ctx.wash].t+(S.ctx.pk?" (กระบะ)":"")+'</span><span class="tag">ฟิล์มกรองแสง '+esc(TINT_LABEL[S.ctx.tint]||S.ctx.tint)+'</span><span class="tag">ฟิล์มใส '+S.ctx.ppf+"</span>";
-  el.innerHTML='<div><span class="plate">'+esc($("#plate").value.trim())+"</span> "+esc(S.car.label)+(S.member?' <span class="tag member">สมาชิก</span>':"")+'</div><div class="tags" style="margin:0">'+tags+'</div><button type="button" class="linkbtn" id="editCar">แก้ไขข้อมูลรถ</button>';
+  el.innerHTML='<div><span class="plate">'+esc($("#plate").value.trim())+"</span> "+esc(S.car.label)+(S.member?' <span class="tag member">สมาชิก</span>':"")+'</div><div class="tags" style="margin:0">'+tags+'</div><button type="button" class="linkbtn" id="editCar"'+(S.editJobId&&!S.owner?" hidden":"")+'>แก้ไขข้อมูลรถ</button>';
 }
 var PANES=[["f","กระจกหน้า","หน้า"],["fs","ข้างหน้า (ซ้าย-ขวา)","ข้างหน้า"],["rs","ข้างหลัง (ซ้าย-ขวา)","ข้างหลัง"],["r","กระจกหลัง","หลัง"],["sr","ซันรูฟ","ซันรูฟ"]];
 function panesHtml(l,x){
@@ -1527,9 +1528,10 @@ function saveJob(){
     var log=(cur.edits||[]).concat([{by:by,at:Date.now(),chg:chg}]).slice(-20);
     repriceEdit();
     var moto0=S.kind==="moto";
-    var patch={car:S.car.label,wash:moto0?null:S.ctx.wash,tint:moto0?null:S.ctx.tint,ppf:moto0?null:S.ctx.ppf,pk:moto0?false:!!S.ctx.pk,cc:moto0?S.ctx.cc:null,shots:Object.assign({},S.cshots||{}),checks:S.checks.slice(),confirms:S.confirms.slice(),cond:$("#cond").value.trim(),
+    var patch={shots:Object.assign({},S.cshots||{}),checks:S.checks.slice(),confirms:S.confirms.slice(),cond:$("#cond").value.trim(),
       lines:S.lines.map(function(l){return {g:l.g,o:l.o,name:lineName(l),note:l.note.trim(),price:lineAmount(l),sun:l.sun||0,pn:l.pn||null,wy:isWarr(l)?wyOf(l):0}}),
       discount:Number($("#discount").value)||0,deposit:Number($("#deposit").value)||0,total:t.total,editedBy:by,editedAt:Date.now(),edits:log};
+    if(S.owner)Object.assign(patch,{car:S.car.label,wash:moto0?null:S.ctx.wash,tint:moto0?null:S.ctx.tint,ppf:moto0?null:S.ctx.ppf,pk:moto0?false:!!S.ctx.pk,cc:moto0?S.ctx.cc:null});
     S.saving=true;renderBar();
     updJob(S.editJobId,patch).then(function(){toast("บันทึกการแก้ไขแล้ว");resetForm();setTab("queue")}).catch(function(e){
       toast((e&&e.code==="invalid_argument"?"บัญชีนี้แก้ไขข้อมูลไม่ได้":"บันทึกไม่สำเร็จ ลองอีกครั้ง")+(e&&(e.code||e.message)?" ("+String(e.code||e.message).slice(0,50)+")":""))
