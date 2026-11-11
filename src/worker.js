@@ -173,7 +173,7 @@ async function api(req, env, url) {
     const W = 2500, hh = 843, cw = [833, 833, 834];
     const msgA = (t) => ({ type: "message", text: t });
     const acts = [msgA("สนใจฟิล์มกรองแสง ขอข้อมูลหน่อยครับ"), msgA("สนใจฟิล์มกันรอย PPF ขอข้อมูลหน่อยครับ"), msgA("สนใจเคลือบเซรามิค ขอข้อมูลหน่อยครับ"),
-      msgA("สอบถามค่าล้างรถ/ดีเทลลิ่งหน่อยครับ"), { type: "uri", uri: "https://karnet.org/pub/" }, { type: "uri", uri: "tel:0639282291" }];
+      msgA("สอบถามค่าล้างรถ/ดีเทลลิ่งหน่อยครับ"), { type: "uri", uri: "https://maps.app.goo.gl/AyGSkesaLNgTcUkR8?g_st=ic" }, { type: "uri", uri: "tel:0639282291" }];
     const areas = acts.map((a, i) => ({ bounds: { x: cw.slice(0, i % 3).reduce((x, y) => x + y, 0), y: Math.floor(i / 3) * hh, width: cw[i % 3], height: hh }, action: a }));
     const r1 = await fetch("https://api.line.me/v2/bot/richmenu", { method: "POST", headers: { ...H, "content-type": "application/json" },
       body: JSON.stringify({ size: { width: W, height: hh * 2 }, selected: true, name: "cs-menu", chatBarText: "สอบถามราคา", areas }) });
