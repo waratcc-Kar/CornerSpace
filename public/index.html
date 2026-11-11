@@ -215,7 +215,6 @@ textarea.in{min-height:76px;resize:vertical}
 .pay .pr .in{width:120px;text-align:right;min-height:44px}
 .pay .pst{font-size:.9rem;font-variant-numeric:tabular-nums}
 .pay .pst.ok{color:var(--ok-ink);font-weight:600}.pay .pst.no{color:var(--danger);font-weight:600}
-.paid.credit{background:var(--yellow);color:var(--yellow-ink);font-weight:600}
 .paid{font-size:.9rem;color:var(--ok-ink);background:var(--ok-bg);border-radius:10px;padding:6px 12px;margin-top:10px}
 .copybox{width:100%;min-height:150px;margin-top:10px}
 
@@ -937,9 +936,9 @@ function exportData(kind){
   if(kind==="customers"){
     csv=toCsv(["ชื่อ","เบอร์","รุ่นรถ","ทะเบียน","โปรแกรม/รายการ","วันหมดประกัน","บริการที่ทำแล้ว (เดือน)"],S.customers.map(function(m){return [m.n,m.p,m.c,m.plate,m.g,m.e,(m.sv||[]).join(" ")]}));name="corner-space-ลูกค้า-"+day+".csv";
   }else if(kind==="jobs"){
-    csv=toCsv(["เลขที่","วันที่รับ","สถานะ","ทะเบียน","ชื่อ","เบอร์","รถ","รายการ","ส่วนลด","มัดจำ","ยอดรวม","ชำระเงินสด","ชำระสแกนจ่าย","ค้างจ่าย","ใช้เวลา (นาที)"],S.jobs.map(function(j){
+    csv=toCsv(["เลขที่","วันที่รับ","สถานะ","ทะเบียน","ชื่อ","เบอร์","รถ","รายการ","ส่วนลด","มัดจำ","ยอดรวม","ชำระเงินสด","ชำระสแกนจ่าย","ใช้เวลา (นาที)"],S.jobs.map(function(j){
       var st=STATUS.filter(function(x){return x[0]===j.status})[0];
-      return [j.no,isoDay(j.createdAt),st?st[1]:j.status,j.plate,j.name,j.phone,j.car,(j.lines||[]).map(function(l){return l.name+(l.note?" ("+l.note+")":"")+" "+(l.price==null?"":l.price)}).join(" | "),j.discount||0,j.deposit||0,j.total||0,(j.pay&&j.pay.cash)||0,(j.pay&&j.pay.scan)||0,(j.pay&&j.pay.credit?(j.pay.owed||0):0),(j.doneAt&&j.createdAt)?Math.round((j.doneAt-j.createdAt)/60000):""]}));name="corner-space-ใบรับรถ-"+day+".csv";
+      return [j.no,isoDay(j.createdAt),st?st[1]:j.status,j.plate,j.name,j.phone,j.car,(j.lines||[]).map(function(l){return l.name+(l.note?" ("+l.note+")":"")+" "+(l.price==null?"":l.price)}).join(" | "),j.discount||0,j.deposit||0,j.total||0,(j.pay&&j.pay.cash)||0,(j.pay&&j.pay.scan)||0,(j.doneAt&&j.createdAt)?Math.round((j.doneAt-j.createdAt)/60000):""]}));name="corner-space-ใบรับรถ-"+day+".csv";
   }else{
     csv=toCsv(["วันที่นัด","ทะเบียน","ชื่อ","เบอร์","รถ","โปรแกรม","จองโดย"],S.bookings.slice().sort(function(a,b){return a.date<b.date?-1:1}).map(function(b){return [b.date,b.plate,b.name,b.phone,b.car,b.prog,b.by==="customer"?"ลูกค้า":"ร้าน"]}));name="corner-space-นัดบริการ-"+day+".csv";
   }
@@ -1666,23 +1665,21 @@ function durHtml(j){
 function jobBal(j){return Math.max(0,(j.total||0)-(j.deposit||0))}
 function payDraft(j){
   var d=S.payD||(S.payD={});
-  if(!d[j.id]){var pp=j.pay||{};d[j.id]={cash:{on:!!pp.cash,amt:pp.cash||0},scan:{on:!!pp.scan,amt:pp.scan||0},credit:!!pp.credit}}
+  if(!d[j.id]){var pp=j.pay||{};d[j.id]={cash:{on:!!pp.cash,amt:pp.cash||0},scan:{on:!!pp.scan,amt:pp.scan||0}}}
   return d[j.id];
 }
 function paySum(d){return (d.cash.on?Number(d.cash.amt)||0:0)+(d.scan.on?Number(d.scan.amt)||0:0)}
 function payStatusHtml(j,d){
   var bal=jobBal(j),sum=paySum(d),diff=bal-sum;
-  if(d.credit)return '<span class="pst ok">ค้างจ่าย ฿'+bal.toLocaleString("th-TH")+" · รวมบิลสิ้นเดือน</span>";
   return diff===0?'<span class="pst ok">ครบ ฿'+bal.toLocaleString("th-TH")+"</span>":'<span class="pst no">'+(diff>0?"ยังขาด ฿"+diff.toLocaleString("th-TH"):"เกิน ฿"+(-diff).toLocaleString("th-TH"))+"</span>";
 }
 function payPanel(j){
   var d=payDraft(j),bal=jobBal(j);
   var row=function(k,label){return '<div class="pr"><label><input type="radio" name="pm-'+esc(j.id)+'" data-pk="'+k+'"'+(d[k].on?" checked":"")+"> "+label+'</label><input class="in" type="number" data-pa="'+k+'" value="'+(d[k].on?d[k].amt:"")+'" placeholder="0" aria-label="ยอด'+label+'" readonly tabindex="-1"></div>'};
-  return '<div class="pay"><b>ชำระเงิน (เลือกอย่างใดอย่างหนึ่ง) · ยอดที่ต้องชำระ ฿'+bal.toLocaleString("th-TH")+(j.deposit?" (หักมัดจำแล้ว)":"")+"</b>"+row("cash","เงินสด")+row("scan","สแกนจ่าย")+'<div class="pr"><label><input type="radio" name="pm-'+esc(j.id)+'" data-pk="credit"'+(d.credit?" checked":"")+"> ค้างจ่าย รวมบิลสิ้นเดือน (รับรถได้ตามปกติ)</label></div>"+'<div data-pst>'+payStatusHtml(j,d)+"</div></div>";
+  return '<div class="pay"><b>ชำระเงิน (เลือกอย่างใดอย่างหนึ่ง) · ยอดที่ต้องชำระ ฿'+bal.toLocaleString("th-TH")+(j.deposit?" (หักมัดจำแล้ว)":"")+"</b>"+row("cash","เงินสด")+row("scan","สแกนจ่าย")+'<div data-pst>'+payStatusHtml(j,d)+"</div></div>";
 }
 function payDone(j){
   var p=j.pay;if(!p)return "";
-  if(p.credit)return '<div class="paid credit">ค้างจ่าย ฿'+Number(p.owed||0).toLocaleString("th-TH")+' · รวมบิลสิ้นเดือน<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn ghost sm" data-act="settlecash">รับชำระแล้ว (เงินสด)</button><button class="btn ghost sm" data-act="settlescan">รับชำระแล้ว (สแกนจ่าย)</button></div></div>';
   var t=[];if(p.cash)t.push("เงินสด ฿"+Number(p.cash).toLocaleString("th-TH"));if(p.scan)t.push("สแกนจ่าย ฿"+Number(p.scan).toLocaleString("th-TH"));
   return '<div class="paid">ชำระเงินแล้ว · '+(t.join(" · ")||"-")+"</div>";
 }
@@ -1700,10 +1697,6 @@ function jobAct(id,act){
   if(j.status==="delivered"&&(act==="back"||act==="edit"||act==="esave")){toast("ชำระเงินแล้ว แก้ไขรายการไม่ได้");return}
   if(act==="edit"){startEdit(j);return}
   if(act==="ecancel"){S.editJob=null;S.editD=null;renderQueue();return}
-  if(act==="settlecash"||act==="settlescan"){
-    if(!(j.pay&&j.pay.credit)){return}
-    var amt=j.pay.owed||jobBal(j);
-    updJob(id,{pay:{cash:act==="settlecash"?amt:0,scan:act==="settlescan"?amt:0,paidAt:Date.now(),creditSettledAt:Date.now()}}).then(function(){toast("บันทึกรับชำระแล้ว")});return}
   if(act==="payopen"){S.payOpen=id;renderQueue();return}
   if(act==="payclose"){S.payOpen=null;renderQueue();return}
   if(act==="esave"){
@@ -1716,11 +1709,8 @@ function jobAct(id,act){
   }else
   if(act==="next"&&STATUS[si][0]==="done"){
     var d=payDraft(j),bal=jobBal(j),sum=paySum(d);
-    if(d.credit){p=updJob(id,{status:"delivered",pay:{cash:0,scan:0,credit:true,owed:bal,paidAt:Date.now()}})}
-    else{
-    if(bal>0&&sum!==bal){toast(sum<bal?"ยังรับเงินไม่ครบ เลือกเงินสด สแกนจ่าย หรือค้างจ่ายก่อนส่งมอบ":"ยอดที่ติ๊กเกินยอดที่ต้องชำระ");return}
+    if(bal>0&&sum!==bal){toast(sum<bal?"ยังรับเงินไม่ครบ เลือกเงินสดหรือสแกนจ่ายก่อนส่งมอบ":"ยอดที่ติ๊กเกินยอดที่ต้องชำระ");return}
     p=updJob(id,{status:"delivered",pay:{cash:d.cash.on?Number(d.cash.amt)||0:0,scan:d.scan.on?Number(d.scan.amt)||0:0,paidAt:Date.now()}});
-    }
   }else if(act==="next"&&si<STATUS.length-1){var ns=STATUS[si+1][0];p=updJob(id,ns==="done"?{status:ns,doneAt:Date.now()}:{status:ns})}
   else if(act==="back"&&si>0){var bs=STATUS[si-1][0];p=updJob(id,j.status==="done"?{status:bs,doneAt:null}:{status:bs})}
   else if(act==="push"){linePush(j.phone,lineSummary(j));return}
@@ -2177,9 +2167,8 @@ function wire(){
   $("#jobs").addEventListener("change",function(e){
     var k=e.target.dataset&&e.target.dataset.pk;if(!k)return;
     var card=e.target.closest(".job"),j=S.jobs.filter(function(x){return x.id===card.dataset.id})[0];if(!j)return;
-    var d=payDraft(j);
-    if(k==="credit"){d.credit=true;d.cash.on=false;d.cash.amt=0;d.scan.on=false;d.scan.amt=0}
-    else{var o=k==="cash"?"scan":"cash";d.credit=false;d[k].on=true;d[k].amt=jobBal(j);d[o].on=false;d[o].amt=0}
+    var d=payDraft(j),o=k==="cash"?"scan":"cash";
+    d[k].on=true;d[k].amt=jobBal(j);d[o].on=false;d[o].amt=0;
     renderQueue();
   });
   $("#jobs").addEventListener("input",function(e){
