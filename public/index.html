@@ -157,6 +157,7 @@ textarea.in{min-height:76px;resize:vertical}
 .btn{min-height:46px;padding:0 22px;border-radius:999px;border:2px solid transparent;font-weight:600;cursor:pointer;white-space:nowrap}
 .btn.primary{background:var(--yellow);color:var(--yellow-ink)}
 .btn.blue{background:var(--blue);color:#fff}
+a.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
 .btn.ghost{background:transparent;border-color:var(--line);color:var(--ink)}
 .btn.sm{min-height:38px;padding:0 16px;font-size:.9rem}
 .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -1619,6 +1620,7 @@ function renderQueue(){
       (j.status==="done"?(S.payOpen===j.id?'<button class="btn primary sm" data-act="next">ยืนยันชำระเงินและส่งมอบ</button><button class="btn ghost sm" data-act="payclose">ปิด</button>':'<button class="btn primary sm" data-act="payopen">ชำระเงิน</button>'):(st[2]?'<button class="btn primary sm" data-act="next">'+st[2]+"</button>":""))+
       (si>0&&j.status!=="delivered"?'<button class="btn ghost sm" data-act="back">ย้อนสถานะ</button>':"")+
       (j.status!=="delivered"&&S.editJob!==j.id?'<button class="btn ghost sm" data-act="edit">แก้ไข</button>':"")+
+      (digits(j.phone).length>=9?'<a class="btn blue sm" href="tel:'+digits(j.phone)+'" aria-label="โทรหาลูกค้า">โทรหาลูกค้า</a>':"")+
       '<button class="btn ghost sm" data-act="copy">คัดลอกส่ง LINE</button>'+(window.csLine?'<button class="btn ghost sm" data-act="push">ส่งเข้า LINE ลูกค้า</button>':"")+'</div>'+
       (S.showText===j.id?'<textarea class="in copybox" readonly>'+esc(lineSummary(j))+"</textarea>":"")+"</article>";
   }).join("");
