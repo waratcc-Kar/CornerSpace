@@ -1609,7 +1609,7 @@ function editHtml(j){
    '<label class="f"><span>มัดจำ</span><input class="in" type="number" inputmode="numeric" min="0" data-ek="deposit" value="'+d.deposit+'"></label>'+
    '<label class="f"><span>รอยเดิม/หมายเหตุ</span><input class="in" data-ek="cond" value="'+esc(d.cond)+'"></label>'+
    '<p class="hint" style="margin:0">ผู้แก้ไข: '+esc(myId())+'</p>'+
-   '<div class="acts"><button class="btn primary sm" data-act="esave">บันทึกการแก้ไข</button><button class="btn ghost sm" data-act="ecancel">ยกเลิก</button></div></div>';
+   '<div class="acts"><button class="btn primary sm" data-act="esave">บันทึกการแก้ไข</button><button class="btn ghost sm" data-act="addphoto">เพิ่มรูป</button><button class="btn ghost sm" data-act="ecancel">ยกเลิก</button></div></div>';
 }
 /* ---------- สรุปรายรับ (เจ้าของร้านเท่านั้น) : นับจากเงินที่รับตอนส่งมอบ (เงินสด + สแกนจ่าย) ตามวันที่รับเงิน ---------- */
 var INC={p:"day",off:0};
@@ -1674,13 +1674,11 @@ function renderQueue(){
       (j.editedBy?'<p class="hint">แก้ไขล่าสุดโดย '+esc(j.editedBy)+" · "+dstr(j.editedAt)+" "+new Date(j.editedAt).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+(j.edits&&j.edits.length>1?" ("+j.edits.length+" ครั้ง)":"")+(j.edits&&j.edits.length&&j.edits[j.edits.length-1].chg?" · เปลี่ยน "+esc(j.edits[j.edits.length-1].chg):"")+"</p>":"")+
       (S.editJob===j.id?editHtml(j):"")+
       ((j.status==="done"||j.status==="delivered")?durHtml(j):"")+
-      (j.status==="done"&&S.payOpen===j.id?payPanel(j):(j.status==="delivered"?payDone(j):""))+
+      (j.status!=="delivered"&&S.payOpen===j.id?payPanel(j):(j.status==="delivered"?payDone(j):""))+
       '<div class="acts">'+
-      (j.status==="done"?(S.payOpen===j.id?'<button class="btn primary sm" data-act="next">ยืนยันชำระเงินและส่งมอบ</button><button class="btn ghost sm" data-act="payclose">ปิด</button>':'<button class="btn primary sm" data-act="payopen">ชำระเงิน</button>'):(st[2]?'<button class="btn primary sm" data-act="next">'+st[2]+"</button>":""))+
-      (si>0&&j.status!=="delivered"?'<button class="btn ghost sm" data-act="back">ย้อนสถานะ</button>':"")+
+      (j.status!=="delivered"?(S.payOpen===j.id?'<button class="btn primary sm" data-act="next">ยืนยันชำระเงินและส่งมอบ</button><button class="btn ghost sm" data-act="payclose">ปิด</button>':'<button class="btn primary sm" data-act="payopen">ชำระเงิน</button>'):"")+
       (j.status!=="delivered"&&S.editJob!==j.id?'<button class="btn ghost sm" data-act="edit">แก้ไข</button>':"")+
-      (digits(j.phone).length>=9?'<a class="btn blue sm" href="tel:'+digits(j.phone)+'" aria-label="โทรหาลูกค้า">โทรหาลูกค้า</a>':"")+
-      '<button class="btn ghost sm" data-act="addphoto">เพิ่มรูป</button><button class="btn ghost sm" data-act="copy">คัดลอกส่ง LINE</button>'+(window.csLine?'<button class="btn ghost sm" data-act="push">ส่งเข้า LINE ลูกค้า</button>':"")+'</div>'+
+      (digits(j.phone).length>=9?'<a class="btn blue sm" href="tel:'+digits(j.phone)+'" aria-label="โทรหาลูกค้า">โทรหาลูกค้า</a>':"")+'</div>'+
       (S.showText===j.id?'<textarea class="in copybox" readonly>'+esc(lineSummary(j))+"</textarea>":"")+"</article>";
   }).join("");
   if(S.showText){var ta=$(".copybox");if(ta){ta.focus();ta.select()}}
@@ -1770,10 +1768,10 @@ function jobAct(id,act){
     p=updJob(id,{cond:d.cond.trim(),discount:Number(d.discount)||0,deposit:Number(d.deposit)||0,lines:lines,total:total,editedBy:by,editedAt:Date.now(),edits:log});
     S.editJob=null;S.editD=null;p.then(function(){toast("บันทึกการแก้ไขแล้ว")});
   }else
-  if(act==="next"&&STATUS[si][0]==="done"){
+  if(act==="next"&&j.status!=="delivered"){
     var d=payDraft(j),bal=jobBal(j),sum=paySum(d);
     if(bal>0&&sum!==bal){toast(sum<bal?"ยังรับเงินไม่ครบ เลือกเงินสดหรือสแกนจ่ายก่อนส่งมอบ":"ยอดที่ติ๊กเกินยอดที่ต้องชำระ");return}
-    p=updJob(id,{status:"delivered",pay:{cash:d.cash.on?Number(d.cash.amt)||0:0,scan:d.scan.on?Number(d.scan.amt)||0:0,paidAt:Date.now()}});
+    p=updJob(id,{status:"delivered",doneAt:j.doneAt||Date.now(),pay:{cash:d.cash.on?Number(d.cash.amt)||0:0,scan:d.scan.on?Number(d.scan.amt)||0:0,paidAt:Date.now()}});
   }else if(act==="next"&&si<STATUS.length-1){var ns=STATUS[si+1][0];p=updJob(id,ns==="done"?{status:ns,doneAt:Date.now()}:{status:ns})}
   else if(act==="back"&&si>0){var bs=STATUS[si-1][0];p=updJob(id,j.status==="done"?{status:bs,doneAt:null}:{status:bs})}
   else if(act==="push"){linePush(j.phone,lineSummary(j));return}
