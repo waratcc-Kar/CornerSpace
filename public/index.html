@@ -786,16 +786,26 @@ function setTab(t){
   if(t==="chat"){chPoll();renderChat()}
 }
 function goPage(n){
-  if(n===1&&S.editJobId){toast("แก้ไขข้อมูลรถและลูกค้าไม่ได้ แก้ไขได้เฉพาะโปรแกรมที่ทำ");return}
   if(n===2){
     if(!S.ctx){toast(S.kind==="moto"?"ใส่ขนาดเครื่องยนต์ (cc) ก่อน":"เลือกรุ่นรถก่อน");return}
     if(!$("#cname").value.trim()||!$("#phone").value.trim()){
       toast("บันทึกชื่อและเบอร์โทรลูกค้าก่อน");S.ncShow=!$("#manualWrap").hidden?S.ncShow:true;renderPage();
       var f=!$("#newCust").hidden?($("#ncName").value.trim()?$("#ncPhone"):$("#ncName")):($("#cname").value.trim()?$("#phone"):$("#cname"));f.focus();return}
   }
+  if(n===2&&S.editJobId)repriceEdit();
   S.page=n;S.nav=[];
   refresh();
   try{window.scrollTo(0,0)}catch(e){}
+}
+/* แก้ไขใบเดิม: เปลี่ยนรุ่น/ไซส์รถแล้ว ราคาโปรแกรมที่ยังเป็นราคาอัตโนมัติเดิมให้คำนวณใหม่ตามไซส์ใหม่ (ราคาที่พิมพ์เองคงไว้) */
+function repriceEdit(){
+  var o=S.editCtx0,n=S.ctx;if(!o||!n||JSON.stringify(o)===JSON.stringify(n))return;
+  S.lines.forEach(function(l){
+    if(l.manual==null)return;
+    S.ctx=o;var d=def(l),p=priceFor(d.g,d.o),old=p==null?null:p+sunPrice(l);S.ctx=n;
+    if(old!=null&&l.manual===old)l.manual=null;
+  });
+  S.editCtx0=JSON.parse(JSON.stringify(n));
 }
 function renderPage(){
   renderReg();
@@ -820,8 +830,10 @@ function renderPage(){
   }
   $("#p1").hidden=S.page!==1;$("#p2").hidden=S.page!==2;
   $("#bar1").hidden=S.page!==1;$("#bar2").hidden=S.page!==2;
+  ["plate","prov","color","cname","phone","member","ncName","ncPhone"].forEach(function(i){var e=$("#"+i);if(e)e.disabled=!!S.editJobId});
+  $$("#kind button").forEach(function(b){b.disabled=!!S.editJobId});
   var eb=$("#editBanner");eb.hidden=!S.editJobId;
-  if(S.editJobId){var ej=S.jobs.filter(function(x){return x.id===S.editJobId})[0];$("#editBannerTx").textContent="แก้ไขใบ "+(ej?ej.no:"")+" · ข้อมูลลูกค้าแก้ไม่ได้ · ลบโปรแกรมเดิมไม่ได้ แต่เปลี่ยนเป็นโปรแกรมอื่น เพิ่ม หรือแก้ราคาได้"}
+  if(S.editJobId){var ej=S.jobs.filter(function(x){return x.id===S.editJobId})[0];$("#editBannerTx").textContent="แก้ไขใบ "+(ej?ej.no:"")+" · แก้รุ่น/ไซส์รถได้ที่ปุ่ม แก้ไขข้อมูลรถ · ข้อมูลลูกค้าแก้ไม่ได้ · ลบโปรแกรมเดิมไม่ได้ แต่เปลี่ยนเป็นโปรแกรมอื่น เพิ่ม หรือแก้ราคาได้"}
   $("#saveBtn").textContent=S.editJobId?"บันทึกการแก้ไข":"บันทึกใบรับรถ";
   $("#st1").setAttribute("aria-current",S.page===1?"step":"false");
   $("#st2").setAttribute("aria-current",S.page===2?"step":"false");
@@ -1506,7 +1518,9 @@ function saveJob(){
     var add=Object.keys(now2).filter(function(k){return !S.editKeys[k]}).map(function(k){return now2[k]});
     var chg=(rem.length||add.length)?(rem.join(", ")||"-")+" → "+(add.join(", ")||"-"):"";
     var log=(cur.edits||[]).concat([{by:by,at:Date.now(),chg:chg}]).slice(-20);
-    var patch={shots:Object.assign({},S.cshots||{}),checks:S.checks.slice(),confirms:S.confirms.slice(),cond:$("#cond").value.trim(),
+    repriceEdit();
+    var moto0=S.kind==="moto";
+    var patch={car:S.car.label,wash:moto0?null:S.ctx.wash,tint:moto0?null:S.ctx.tint,ppf:moto0?null:S.ctx.ppf,pk:moto0?false:!!S.ctx.pk,cc:moto0?S.ctx.cc:null,shots:Object.assign({},S.cshots||{}),checks:S.checks.slice(),confirms:S.confirms.slice(),cond:$("#cond").value.trim(),
       lines:S.lines.map(function(l){return {g:l.g,o:l.o,name:lineName(l),note:l.note.trim(),price:lineAmount(l),sun:l.sun||0,pn:l.pn||null,wy:isWarr(l)?wyOf(l):0}}),
       discount:Number($("#discount").value)||0,deposit:Number($("#deposit").value)||0,total:t.total,editedBy:by,editedAt:Date.now(),edits:log};
     S.saving=true;renderBar();
@@ -1650,6 +1664,7 @@ function startEdit(j){
     $("#carQ").value=j.car||"";
   }
   S.lines=j.lines.map(function(l){return {g:l.g,o:l.o,note:l.note||"",manual:l.price,sun:l.sun||0,pn:l.pn||null,wy:l.wy}});
+  S.editCtx0=S.ctx?JSON.parse(JSON.stringify(S.ctx)):null;
   S.reveal=true;S.edit=false;S.fail=false;S.ncShow=false;
   setTab("intake");S.page=2;S.nav=[];refresh();
   try{window.scrollTo(0,0)}catch(e){}
