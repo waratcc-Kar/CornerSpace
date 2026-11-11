@@ -1674,9 +1674,9 @@ function renderQueue(){
       (j.editedBy?'<p class="hint">แก้ไขล่าสุดโดย '+esc(j.editedBy)+" · "+dstr(j.editedAt)+" "+new Date(j.editedAt).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+(j.edits&&j.edits.length>1?" ("+j.edits.length+" ครั้ง)":"")+(j.edits&&j.edits.length&&j.edits[j.edits.length-1].chg?" · เปลี่ยน "+esc(j.edits[j.edits.length-1].chg):"")+"</p>":"")+
       (S.editJob===j.id?editHtml(j):"")+
       ((j.status==="done"||j.status==="delivered")?durHtml(j):"")+
-      (j.status!=="delivered"&&S.payOpen===j.id?payPanel(j):(j.status==="delivered"?payDone(j):""))+
+      (j.status==="done"&&S.payOpen===j.id?payPanel(j):(j.status==="delivered"?payDone(j):""))+
       '<div class="acts">'+
-      (j.status!=="delivered"?(S.payOpen===j.id?'<button class="btn primary sm" data-act="next">ยืนยันชำระเงินและส่งมอบ</button><button class="btn ghost sm" data-act="payclose">ปิด</button>':'<button class="btn primary sm" data-act="payopen">ชำระเงิน</button>'):"")+
+      (j.status==="done"?(S.payOpen===j.id?'<button class="btn primary sm" data-act="next">ยืนยันชำระเงินและส่งมอบ</button><button class="btn ghost sm" data-act="payclose">ปิด</button>':'<button class="btn primary sm" data-act="payopen">ชำระเงิน</button>'):(st[2]?'<button class="btn primary sm" data-act="next">'+st[2]+"</button>":""))+
       (j.status!=="delivered"&&S.editJob!==j.id?'<button class="btn ghost sm" data-act="edit">แก้ไข</button>':"")+
       (digits(j.phone).length>=9?'<a class="btn blue sm" href="tel:'+digits(j.phone)+'" aria-label="โทรหาลูกค้า">โทรหาลูกค้า</a>':"")+'</div>'+
       (S.showText===j.id?'<textarea class="in copybox" readonly>'+esc(lineSummary(j))+"</textarea>":"")+"</article>";
@@ -1768,7 +1768,7 @@ function jobAct(id,act){
     p=updJob(id,{cond:d.cond.trim(),discount:Number(d.discount)||0,deposit:Number(d.deposit)||0,lines:lines,total:total,editedBy:by,editedAt:Date.now(),edits:log});
     S.editJob=null;S.editD=null;p.then(function(){toast("บันทึกการแก้ไขแล้ว")});
   }else
-  if(act==="next"&&j.status!=="delivered"){
+  if(act==="next"&&j.status==="done"){
     var d=payDraft(j),bal=jobBal(j),sum=paySum(d);
     if(bal>0&&sum!==bal){toast(sum<bal?"ยังรับเงินไม่ครบ เลือกเงินสดหรือสแกนจ่ายก่อนส่งมอบ":"ยอดที่ติ๊กเกินยอดที่ต้องชำระ");return}
     p=updJob(id,{status:"delivered",doneAt:j.doneAt||Date.now(),pay:{cash:d.cash.on?Number(d.cash.amt)||0:0,scan:d.scan.on?Number(d.scan.amt)||0:0,paidAt:Date.now()}});
