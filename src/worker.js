@@ -494,7 +494,16 @@ async function handleChat(env, uid, replyToken, kind, msgId) {
   if (!env.LINE_CHANNEL_ACCESS_TOKEN || !(await autoEnabled(env))) return;
   const now = Date.now();
   const pz = await env.DB.prepare("SELECT until FROM chat_pause WHERE user_id = ?1").bind(uid).first();
-  if (pz && pz.until > now) return;
+  if (pz && pz.until > now) {
+    /* พนักงานเพิ่งตอบเอง AI พักอยู่: แจ้งเจ้าของไลน์ (ไม่เกิน 1 ครั้ง/15 นาที/ลูกค้า) กันลูกค้าถูกเงียบ */
+    const k = "pznotify_" + uid;
+    const last = await env.DB.prepare("SELECT v FROM meta WHERE k = ?1").bind(k).first();
+    if (!last || now - last.v > 900e3) {
+      await env.DB.prepare("INSERT INTO meta (k, v) VALUES (?1, ?2) ON CONFLICT (k) DO UPDATE SET v = excluded.v").bind(k, now).run();
+      await notifyOwner(env, uid, "AI พักอยู่เพราะพนักงานเพิ่งตอบเอง แต่ลูกค้าส่งข้อความใหม่ (กดเปิด AI ต่อได้ในแอป)");
+    }
+    return;
+  }
   const cnt = (await env.DB.prepare("SELECT count(*) AS n FROM chat_msgs WHERE user_id = ?1 AND dir IN ('auto','hold') AND ts > ?2").bind(uid, now - 3600e3).first()).n;
   if (cnt >= AUTO_PER_HOUR) {
     await env.DB.prepare("UPDATE chat_threads SET draft_flag = 1, draft_reason = ?2 WHERE user_id = ?1").bind(uid, "ตอบอัตโนมัติถึงเพดานต่อชั่วโมงแล้ว ให้ทีมงานดูต่อ").run();
@@ -560,8 +569,8 @@ async function chatsApi(req, env, parts, m) {
     const ts = Date.now();
     await env.DB.prepare("INSERT INTO chat_msgs (user_id, dir, text, ts) VALUES (?1, 'out', ?2, ?3)").bind(uid, text.slice(0, 4900), ts).run();
     await env.DB.prepare("UPDATE chat_threads SET draft = '', draft_flag = 0, draft_reason = '', unread = 0, last_ts = ?2, last_text = ?3 WHERE user_id = ?1").bind(uid, ts, ("ร้าน: " + text).slice(0, 200)).run();
-    /* พนักงานเข้ามาตอบเอง: หยุด AI ตอบอัตโนมัติในแชตนี้ 12 ชั่วโมง */
-    await env.DB.prepare("INSERT INTO chat_pause (user_id, until) VALUES (?1, ?2) ON CONFLICT (user_id) DO UPDATE SET until = excluded.until").bind(uid, ts + 12 * 3600e3).run();
+    /* พนักงานเข้ามาตอบเอง: หยุด AI ตอบอัตโนมัติในแชตนี้ 2 ชั่วโมง */
+    await env.DB.prepare("INSERT INTO chat_pause (user_id, until) VALUES (?1, ?2) ON CONFLICT (user_id) DO UPDATE SET until = excluded.until").bind(uid, ts + 2 * 3600e3).run();
     return json({ sent: true });
   }
   if (parts[2] === "pause" && m === "POST") {

@@ -718,7 +718,7 @@ function renderChatOpen(box,fresh){
   h+='<label class="f"><span>'+(t.draft?"ร่างคำตอบจาก AI (แก้ไขได้ก่อนส่ง)":"พิมพ์ข้อความตอบลูกค้า")+'</span><textarea class="in" id="chText" rows="6" placeholder="พิมพ์ข้อความ…"></textarea></label>';
   h+='<div class="filters"><button type="button" class="btn blue sm" id="chSend">ส่งเข้า LINE</button><button type="button" class="btn ghost sm" id="chRegen">ให้ AI ร่างใหม่</button><button type="button" class="btn ghost sm" id="chDismiss">ปิดเรื่อง (ไม่ตอบ)</button></div>';
   var pz=t.paused_until&&t.paused_until>Date.now();
-  h+='<div class="filters" style="align-items:center"><span class="hint" style="margin:0">'+(pz?"AI หยุดตอบแชตนี้ถึง "+esc(chTime(t.paused_until)):"AI ตอบอัตโนมัติแชตนี้ได้ (ส่งข้อความจากแท็บนี้แล้วจะหยุดให้ 12 ชม.)")+'</span><button type="button" class="btn ghost sm" id="chPause" data-h="'+(pz?0:24)+'">'+(pz?"เปิด AI อีกครั้ง":"หยุด AI แชตนี้ 24 ชม.")+'</button></div>';
+  h+='<div class="filters" style="align-items:center"><span class="hint" style="margin:0">'+(pz?"AI หยุดตอบแชตนี้ถึง "+esc(chTime(t.paused_until)):"AI ตอบอัตโนมัติแชตนี้ได้ (ส่งข้อความจากแท็บนี้แล้วจะหยุดให้ 2 ชม.)")+'</span><button type="button" class="btn ghost sm" id="chPause" data-h="'+(pz?0:24)+'">'+(pz?"เปิด AI อีกครั้ง":"หยุด AI แชตนี้ 24 ชม.")+'</button></div>';
   h+='<p class="hint" id="chStatus"></p>';
   box.innerHTML=h;
   CH.draftShown=t.draft||"";
