@@ -901,6 +901,10 @@ function lookup(){
   if(act.length)msg+=" · ยังอยู่ในประกัน: "+act.map(function(a){return a.n+" ถึง "+dfmt(a.exp)}).join(", ");
   box.textContent=msg;
   renderCands();
+  /* ดึงชื่อ/เบอร์จากประวัติแล้ว ให้ฟอร์มกรอกข้อมูลลูกค้าตามไปด้วย ไม่ต้องกรอกซ้ำ */
+  (function(){var nm2=$("#cname").value.trim(),ph2=$("#phone").value.trim();
+    if(nm2&&ph2&&S.ncShow){S.ncShow=false;$("#newCust").hidden=true}
+    else if(S.ncShow){var ae=document.activeElement;if(ae!==$("#ncName"))$("#ncName").value=nm2;if(ae!==$("#ncPhone"))$("#ncPhone").value=ph2}})();
   if(!S.memberManual&&S.member!==(act.length>0)){S.member=act.length>0;$("#member").checked=S.member;
     if(!S.member)S.lines=S.lines.filter(function(l){return !(def(l).o.member)});
     refresh()}
