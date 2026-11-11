@@ -179,9 +179,9 @@ async function api(req, env, url) {
       body: JSON.stringify({ size: { width: W, height: hh * 2 }, selected: true, name: "cs-menu", chatBarText: "สอบถามราคา", areas }) });
     if (!r1.ok) return fail(502, "line_create", await r1.text());
     const id = (await r1.json()).richMenuId;
-    const img = await env.ASSETS.fetch(new Request(new URL("/richmenu.png", req.url)));
+    const img = await env.ASSETS.fetch(new Request(new URL("/richmenu.jpg", req.url)));
     if (!img.ok) return fail(500, "no_image", "ไม่พบรูปเมนู");
-    const r2 = await fetch("https://api-data.line.me/v2/bot/richmenu/" + id + "/content", { method: "POST", headers: { ...H, "content-type": "image/png" }, body: await img.arrayBuffer() });
+    const r2 = await fetch("https://api-data.line.me/v2/bot/richmenu/" + id + "/content", { method: "POST", headers: { ...H, "content-type": "image/jpeg" }, body: await img.arrayBuffer() });
     if (!r2.ok) return fail(502, "line_image", await r2.text());
     const r3 = await fetch("https://api.line.me/v2/bot/user/all/richmenu/" + id, { method: "POST", headers: H });
     if (!r3.ok) return fail(502, "line_default", await r3.text());
