@@ -353,6 +353,7 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
       <p class="hint" style="margin:0 0 8px">ถ่ายรูปรอบคันก่อนเริ่มงาน แตะช่องเพื่อถ่าย</p>
       <div class="cshots" id="cshots"></div>
       <input type="file" id="cshotIn" accept="image/*" capture="environment" hidden>
+      <input type="file" id="jobPhotoIn" accept="image/*" multiple hidden>
       <div class="checks" id="checks" hidden></div>
       <label class="f" style="margin-top:10px"><span>รายละเอียด เช่น รอยเดิม / ของมีค่าในรถ (ไม่บังคับ)</span><textarea class="in" id="cond"></textarea></label>
       <p class="sublabel">แจ้งลูกค้าก่อนรับบริการ</p>
@@ -1621,7 +1622,7 @@ function renderQueue(){
       (si>0&&j.status!=="delivered"?'<button class="btn ghost sm" data-act="back">ย้อนสถานะ</button>':"")+
       (j.status!=="delivered"&&S.editJob!==j.id?'<button class="btn ghost sm" data-act="edit">แก้ไข</button>':"")+
       (digits(j.phone).length>=9?'<a class="btn blue sm" href="tel:'+digits(j.phone)+'" aria-label="โทรหาลูกค้า">โทรหาลูกค้า</a>':"")+
-      '<button class="btn ghost sm" data-act="copy">คัดลอกส่ง LINE</button>'+(window.csLine?'<button class="btn ghost sm" data-act="push">ส่งเข้า LINE ลูกค้า</button>':"")+'</div>'+
+      '<button class="btn ghost sm" data-act="addphoto">เพิ่มรูป</button><button class="btn ghost sm" data-act="copy">คัดลอกส่ง LINE</button>'+(window.csLine?'<button class="btn ghost sm" data-act="push">ส่งเข้า LINE ลูกค้า</button>':"")+'</div>'+
       (S.showText===j.id?'<textarea class="in copybox" readonly>'+esc(lineSummary(j))+"</textarea>":"")+"</article>";
   }).join("");
   if(S.showText){var ta=$(".copybox");if(ta){ta.focus();ta.select()}}
@@ -1699,6 +1700,7 @@ function jobAct(id,act){
   if(j.status==="delivered"&&(act==="back"||act==="edit"||act==="esave")){toast("ชำระเงินแล้ว แก้ไขรายการไม่ได้");return}
   if(act==="edit"){startEdit(j);return}
   if(act==="ecancel"){S.editJob=null;S.editD=null;renderQueue();return}
+  if(act==="addphoto"){S.photoJob=id;var pin=$("#jobPhotoIn");pin.value="";pin.click();return}
   if(act==="payopen"){S.payOpen=id;renderQueue();return}
   if(act==="payclose"){S.payOpen=null;renderQueue();return}
   if(act==="esave"){
@@ -2091,6 +2093,16 @@ function wire(){
   $("#cshotIn").addEventListener("change",function(e){
     var f=e.target.files&&e.target.files[0],k=S.cslot;if(!f||!k)return;
     shrinkToDataUrl(f,640,0.5).then(function(u){(S.cshots||(S.cshots={}))[k]=u;renderCshots()}).catch(function(){toast("ใช้รูปนี้ไม่ได้ ลองถ่ายใหม่")});
+  });
+  $("#jobPhotoIn").addEventListener("change",function(e){
+    var fl=Array.prototype.slice.call(e.target.files||[]).slice(0,8),id=S.photoJob;e.target.value="";
+    var j=S.jobs.filter(function(x){return x.id===id})[0];if(!j||!fl.length)return;
+    Promise.all(fl.map(function(f){return shrinkToDataUrl(f,640,0.5).catch(function(){return null})})).then(function(us){
+      us=us.filter(Boolean);if(!us.length){toast("ใช้รูปนี้ไม่ได้ ลองใหม่");return}
+      var cur=S.jobs.filter(function(x){return x.id===id})[0]||j,sh=Object.assign({},cur.shots||{}),n=0;
+      us.forEach(function(u){do{n++}while(sh["เพิ่ม "+n]);sh["เพิ่ม "+n]=u});
+      updJob(id,{shots:sh}).then(function(){toast("เพิ่มรูปแล้ว "+us.length+" รูป")},function(){toast("เพิ่มรูปไม่สำเร็จ ลองอีกครั้ง")});
+    });
   });
   $("#jobs").addEventListener("click",function(e){var im=e.target.closest(".cthumbs img, .jthumb");if(!im)return;var z=$("#zoom");z.querySelector("img").src=im.src;z.hidden=false});
   $("#zoom").addEventListener("click",function(){this.hidden=true});
