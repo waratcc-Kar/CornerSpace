@@ -264,6 +264,7 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
       <button class="tab" role="tab" data-tab="service">นัดบริการ<span class="count" id="scount"></span></button>
       <button class="tab" role="tab" data-tab="chat" id="chatTab" hidden>แชต<span class="count" id="ccount"></span></button>
       <button class="tab" role="tab" data-tab="customers">ลูกค้า</button>
+      <button class="tab" role="tab" data-tab="income" id="incomeTab" hidden>รายรับ</button>
       <button class="tab" role="tab" data-tab="prices">ราคาและไซส์</button>
     </nav>
   </div>
@@ -405,6 +406,11 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
     <div id="custList"></div>
   </section>
 
+  <section id="v-income" hidden>
+    <div class="filters" id="incPeriod"></div>
+    <div id="incBody"></div>
+  </section>
+
   <section id="v-prices" hidden>
     <h2>ตารางราคา</h2>
     <p class="hint">ราคาตั้งต้นมาจากป้ายราคาของร้าน แก้ได้ทุกช่อง ระบบจะดึงไปใส่ในใบรับรถตามประเภทและไซส์ของรถ ช่องที่ว่างให้พนักงานกรอกราคาเองตอนรับรถ</p>
@@ -530,7 +536,7 @@ var baht=function(n){return "฿"+Number(n||0).toLocaleString("th-TH")};
 var tintKey=function(t){return String(t).replace("|","_")};
 var norm=function(s){return String(s).toLowerCase().replace(/[^a-z0-9฀-๿]/g,"")};
 
-var S={tab:"intake",page:1,nav:[],kind:"car",jobs:[],prices:{},draft:{},dirty:false,filter:"all",car:null,ctx:null,lines:[],checks:[],confirms:[],
+var S={tab:"intake",page:1,nav:[],kind:"car",jobs:[],prices:{},draft:{},dirty:false,filter:"working",car:null,ctx:null,lines:[],checks:[],confirms:[],
   member:false,canWrite:true,mode:"local",loaded:false,slow:false,confirmDel:null,showText:null,saving:false,
   listId:"",bk:{cid:"",mi:0,pick:"",msg:"",done:""},bookings:[],svcY:new Date().getFullYear(),svcM:new Date().getMonth(),bookFor:"",bookDel:"",svcText:"",customers:[],custLoaded:false,custEdit:"",custQ:"",custDel:"",importing:false,sumOpen:true,photos:[],maxImg:3,reg:null,reveal:false,edit:false,fail:false,okRead:false,memberManual:false,photoOK:undefined,photoBusy:false,ctl:null,shotUrl:null};
 
@@ -771,11 +777,11 @@ function chLoadAuto(){
 
 /* ---------- tabs & pages ---------- */
 function setTab(t){
-  if(["intake","queue","service","customers","prices","book","chat"].indexOf(t)<0||(t==="chat"&&!window.csApi))t="intake";
+  if(["intake","queue","service","customers","prices","book","chat","income"].indexOf(t)<0||(t==="chat"&&!window.csApi))t="intake";
   document.body.classList.toggle("bookmode",t==="book");
   S.tab=t;
   $$(".tab").forEach(function(b){b.setAttribute("aria-selected",String(b.dataset.tab===t))});
-  ["intake","queue","service","customers","prices","book","chat"].forEach(function(n){$("#v-"+n).hidden=n!==t});
+  ["intake","queue","service","customers","prices","book","chat","income"].forEach(function(n){$("#v-"+n).hidden=n!==t});
   $("#bar").hidden=t!=="intake";
   if(location.hash.slice(1)!==t){try{history.replaceState(null,"","#"+t)}catch(e){location.hash=t}}
   if(t==="queue")renderQueue();
@@ -783,6 +789,7 @@ function setTab(t){
   if(t==="service")renderService();
   if(t==="book")renderBook();
   if(t==="prices")renderPrices();
+  if(t==="income")renderIncome();
   if(t==="chat"){chPoll();renderChat()}
 }
 function goPage(n){
@@ -1602,10 +1609,45 @@ function editHtml(j){
    '<p class="hint" style="margin:0">ผู้แก้ไข: '+esc(myId())+'</p>'+
    '<div class="acts"><button class="btn primary sm" data-act="esave">บันทึกการแก้ไข</button><button class="btn ghost sm" data-act="ecancel">ยกเลิก</button></div></div>';
 }
+/* ---------- สรุปรายรับ (เจ้าของร้านเท่านั้น) : นับจากเงินที่รับตอนส่งมอบ (เงินสด + สแกนจ่าย) ตามวันที่รับเงิน ---------- */
+var INC={p:"day",off:0};
+function incRange(){
+  var n=new Date();n.setHours(0,0,0,0);var a,b;
+  if(INC.p==="day"){a=new Date(n);a.setDate(a.getDate()+INC.off);b=new Date(a);b.setDate(b.getDate()+1)}
+  else if(INC.p==="week"){a=new Date(n);a.setDate(a.getDate()-((a.getDay()+6)%7)+INC.off*7);b=new Date(a);b.setDate(b.getDate()+7)}
+  else{a=new Date(n.getFullYear(),n.getMonth()+INC.off,1);b=new Date(a.getFullYear(),a.getMonth()+1,1)}
+  return [a,b];
+}
+function renderIncome(){
+  var pb=$("#incPeriod"),bd=$("#incBody");if(!pb)return;
+  if(!S.owner){pb.innerHTML="";bd.innerHTML='<p class="empty">ดูสรุปรายรับได้เฉพาะเจ้าของร้าน</p>';return}
+  var r=incRange(),a=r[0],b=r[1],end=new Date(b);end.setDate(end.getDate()-1);
+  var fd=function(d){return d.toLocaleDateString("th-TH",{day:"numeric",month:"short",year:"2-digit"})};
+  var label=INC.p==="day"?fd(a):INC.p==="week"?fd(a)+" – "+fd(end):a.toLocaleDateString("th-TH",{month:"long",year:"numeric"});
+  pb.innerHTML=[["day","รายวัน"],["week","รายสัปดาห์"],["month","รายเดือน"]].map(function(x){return '<button type="button" class="fchip" data-ip="'+x[0]+'" aria-pressed="'+(INC.p===x[0])+'">'+x[1]+"</button>"}).join("")+
+    '<button type="button" class="fchip" data-io="-1" aria-label="ก่อนหน้า">‹</button><b style="align-self:center">'+esc(label)+'</b><button type="button" class="fchip" data-io="1" aria-label="ถัดไป"'+(INC.off>=0?" disabled":"")+'>›</button>';
+  var jobs=S.jobs.filter(function(j){return j.pay&&j.pay.paidAt&&j.pay.paidAt>=a.getTime()&&j.pay.paidAt<b.getTime()});
+  var amt=function(j){return (Number(j.pay.cash)||0)+(Number(j.pay.scan)||0)};
+  var cash=0,scan=0;jobs.forEach(function(j){cash+=Number(j.pay.cash)||0;scan+=Number(j.pay.scan)||0});
+  var days={};jobs.forEach(function(j){var k=isoDay(j.pay.paidAt);(days[k]=days[k]||{n:0,t:0}).n++;days[k].t+=amt(j)});
+  var open=S.jobs.filter(function(j){return j.status!=="delivered"}).reduce(function(t,j){return t+(Number(j.total)||0)},0);
+  var h='<div class="job"><div class="jt" style="font-size:1.4rem"><span>รายรับรวม</span><span>'+baht(cash+scan)+'</span></div>'+
+    '<p class="hint" style="margin:4px 0 0">เงินสด '+baht(cash)+" · สแกนจ่าย "+baht(scan)+" · "+jobs.length+" คัน"+(jobs.length?" · เฉลี่ย "+baht(Math.round((cash+scan)/jobs.length))+"/คัน":"")+"</p></div>";
+  if(INC.p!=="day"){
+    var keys=Object.keys(days).sort().reverse();
+    h+='<div class="job"><b>แยกตามวัน</b>'+(keys.length?'<ul class="jl">'+keys.map(function(k){var d=new Date(k+"T00:00:00");return "<li><span>"+esc(d.toLocaleDateString("th-TH",{weekday:"short",day:"numeric",month:"short"}))+" <small>"+days[k].n+" คัน</small></span><span>"+baht(days[k].t)+"</span></li>"}).join("")+"</ul>":'<p class="hint">ยังไม่มีรายรับในช่วงนี้</p>')+"</div>";
+  }
+  if(INC.p==="day"||jobs.length&&INC.p==="week"){
+    h+='<div class="job"><b>รายการ</b>'+(jobs.length?'<ul class="jl">'+jobs.sort(function(x,y){return y.pay.paidAt-x.pay.paidAt}).map(function(j){return "<li><span>"+esc(j.plate||"")+" "+esc(j.car||"")+" <small>"+esc((j.lines||[]).map(function(l){return l.name}).join(", "))+"</small></span><span>"+baht(amt(j))+"</span></li>"}).join("")+"</ul>":'<p class="hint">ยังไม่มีรายรับในวันนี้</p>')+"</div>";
+  }
+  h+='<p class="hint">นับจากเงินที่รับตอนกด “ส่งมอบรถ” ตามวันที่รับเงิน · ยังไม่รวมงานที่ยังไม่ส่งมอบ (มูลค่ารวม '+baht(open)+")</p>";
+  bd.innerHTML=h;
+}
+
 function renderQueue(){
   var counts={all:S.jobs.length};
   STATUS.forEach(function(s){counts[s[0]]=S.jobs.filter(function(j){return j.status===s[0]}).length});
-  $("#filters").innerHTML=[["all","ทั้งหมด"]].concat(STATUS.map(function(s){return [s[0],s[1]]})).filter(function(f){return f[0]!=="queue"||counts.queue>0||S.filter==="queue"}).map(function(f){
+  $("#filters").innerHTML=STATUS.map(function(s){return [s[0],s[1]]}).filter(function(f){return f[0]!=="queue"||counts.queue>0||S.filter==="queue"}).sort(function(a,b){return (a[0]==="queue"?1:0)-(b[0]==="queue"?1:0)}).concat([["all","ทั้งหมด"]]).map(function(f){
     return '<button type="button" class="fchip" data-f="'+f[0]+'" aria-pressed="'+(S.filter===f[0])+'">'+f[1]+" "+counts[f[0]]+"</button>"}).join("");
   var open=counts.queue+counts.working;
   $("#qcount").textContent=open?String(open):"";
@@ -2192,6 +2234,7 @@ function wire(){
   $("#backupBox").addEventListener("click",function(e){var k=e.target.dataset&&e.target.dataset.bk;if(k)exportData(k)});
   $("#custPhotoIn").addEventListener("change",function(e){var fl=Array.prototype.slice.call(e.target.files||[]);e.target.value="";custPhoto(fl)});
   $("#custList").addEventListener("click",function(e){var b=e.target.closest("[data-ce]");if(b)custAct(b)});
+  $("#v-income").addEventListener("click",function(e){var b=e.target.closest("button");if(!b||b.disabled)return;if(b.dataset.ip){INC.p=b.dataset.ip;INC.off=0}else if(b.dataset.io){INC.off=Math.min(0,INC.off+Number(b.dataset.io))}else return;renderIncome()});
   $("#filters").addEventListener("click",function(e){var b=e.target.closest(".fchip");if(b){S.filter=b.dataset.f;renderQueue()}});
   $("#jobs").addEventListener("change",function(e){
     var k=e.target.dataset&&e.target.dataset.pk;if(!k)return;
@@ -2286,6 +2329,7 @@ function fdRestore(){
       if(user&&S.mode==="db"&&user.can){return Promise.resolve(user.can("data.write")).then(function(v){S.canWrite=v!==false})}
     }).catch(function(){});
   }).then(function(){
+    $("#incomeTab").hidden=!S.owner;if(S.tab==="income")renderIncome();
     notice();
     var onErr=function(e){S.slow=true;S.err=e&&(e.code||e.message)||"";if(S.tab==="queue")renderQueue()};
     store.onJobs(function(list){
