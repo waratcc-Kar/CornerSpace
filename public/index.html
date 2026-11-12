@@ -796,6 +796,7 @@ function goPage(n){
   if(n===1&&S.editJobId&&!S.owner){toast("เฉพาะเจ้าของร้านแก้ไขรุ่น/ไซส์รถได้");return}
   if(n===2){
     if(!S.ctx){toast(S.kind==="moto"?"ใส่ขนาดเครื่องยนต์ (cc) ก่อน":"เลือกรุ่นรถก่อน");return}
+    if(ctxMissing()){toast("รุ่นนี้ไม่มีในตาราง เลือกประเภทล้างรถและไซส์ฟิล์มให้ครบก่อน");renderPage();return}
     if(!$("#cname").value.trim()||!$("#phone").value.trim()){
       toast("บันทึกชื่อและเบอร์โทรลูกค้าก่อน");S.ncShow=!$("#manualWrap").hidden?S.ncShow:true;renderPage();
       var f=!$("#newCust").hidden?($("#ncName").value.trim()?$("#ncPhone"):$("#ncName")):($("#cname").value.trim()?$("#phone"):$("#cname"));f.focus();return}
@@ -817,7 +818,7 @@ function repriceEdit(){
 }
 function renderPage(){
   renderReg();
-  var card=S.reveal&&!S.edit&&!S.fail&&S.ctx;
+  var card=S.reveal&&!S.edit&&!S.fail&&S.ctx&&!ctxMissing();
   $("#manualWrap").hidden=!(S.reveal&&!card);
   var rc=$("#readCard");rc.hidden=!card;
   if(card){
@@ -903,7 +904,7 @@ function lookup(){
       }else{
         if(S.kind!=="car")setKind("car");
         var kc=CARS.filter(function(c){return c.b+" "+c.m===cl.car})[0];if(!kc){var cw=String(cl.car).trim().split(/\s+/);if(cw.length>1)kc=matchCar(cw[0],cw.slice(1).join(" "))}
-        if(kc)pickCar(kc);else{$("#carQ").value=cl.car;customCar()}
+        if(kc)pickCar(kc);else{$("#carQ").value=cl.car;customCar(last&&last.car===cl.car?last:null)}
       }
     }
   }
@@ -1118,11 +1119,12 @@ function pickCar(c){
   $("#carQ").value=S.car.label;$("#carList").hidden=true;$("#carQ").setAttribute("aria-expanded","false");
   refresh();
 }
-var BODY_AUTO={suv:{wash:"SUV",tint:"L",ppf:"XL"},pickup:{wash:"SUV",tint:"M",ppf:"L"},pickup4:{wash:"SUV",tint:"M",ppf:"XL"},mpv:{wash:"MPV",tint:"XL",ppf:"XL"},van:{wash:"MPV",tint:"XL",ppf:"XL"}};
-function customCar(body){
+/* รุ่นที่ไม่มีในตาราง: ไม่ลงไซส์ให้เอง พนักงานต้องเลือกเอง (หรือใช้ไซส์จากใบงานครั้งก่อนของรถคันนี้) */
+function ctxMissing(){return S.kind==="car"&&!!S.ctx&&(!S.ctx.wash||!S.ctx.tint||!S.ctx.ppf)}
+function customCar(prev){
   var label=$("#carQ").value.trim()||"รถรุ่นอื่น";
-  var ba=BODY_AUTO[String(body||"").toLowerCase()];
-  var auto={wash:ba?ba.wash:"SEDAN",tint:ba?ba.tint:"M",ppf:ba?ba.ppf:"M",pk:false,guess:!!ba};
+  var h=prev&&prev.wash&&prev.tint&&prev.ppf;
+  var auto={wash:h?prev.wash:null,tint:h?prev.tint:null,ppf:h?prev.ppf:null,pk:h?!!prev.pk:false,hist:!!h};
   S.car={label:label,auto:auto,known:false};S.ctx=Object.assign({},auto);
   $("#carList").hidden=true;refresh();
 }
@@ -1141,7 +1143,7 @@ function setKind(k){
 }
 function cell(label,id,opts,val,auto,extra){
   var edited=auto!=null&&val!==auto&&S.car.known;
-  return '<label class="cell"><span>'+label+(edited?" · แก้เอง":"")+'</span><select id="'+id+'">'+opts.map(function(o){
+  return '<label class="cell"><span>'+label+(edited?" · แก้เอง":"")+'</span><select id="'+id+'"'+(val==null?' class="err" style="border-color:var(--danger)"':"")+'>'+(val==null?'<option value="" selected disabled>— เลือก —</option>':"")+opts.map(function(o){
     return '<option value="'+esc(o[0])+'"'+(o[0]===val?" selected":"")+">"+esc(o[1])+"</option>"}).join("")+"</select><small>"+(extra||"")+"</small></label>";
 }
 function renderCar(){
@@ -1155,8 +1157,8 @@ function renderCar(){
   }
   if(!S.car){box.innerHTML='<p class="hint">เลือกรุ่นรถ ระบบจะบอกประเภทล้างรถและไซส์ฟิล์มให้เอง</p>';return}
   var c=S.ctx,a=S.car.auto;
-  box.innerHTML='<div class="carname">'+esc(S.car.label)+(S.car.known?(S.car.u?' <small class="hint">(ไซส์ฟิล์มกรองแสงจากตาราง ส่วนประเภทล้างรถและไซส์ฟิล์มใสเป็นค่าประมาณ ตรวจก่อน)</small>':""):' <small class="hint">(ไม่อยู่ในตาราง'+(S.car.auto&&S.car.auto.guess?" ไซส์เป็นค่าประมาณจากทรงรถ":" ตั้งค่าเริ่มต้นเป็นไซส์ M")+' ตรวจก่อน)</small>')+'</div><div class="strip">'+
-    cell("ประเภทล้างรถ","ctxWash",WASH_KEYS.map(function(k){return [k,WASH[k].t]}),c.wash,a.wash,esc(WASH[c.wash].d))+
+  box.innerHTML='<div class="carname">'+esc(S.car.label)+(S.car.known?(S.car.u?' <small class="hint">(ไซส์ฟิล์มกรองแสงจากตาราง ส่วนประเภทล้างรถและไซส์ฟิล์มใสเป็นค่าประมาณ ตรวจก่อน)</small>':""):(S.car.auto&&S.car.auto.hist?' <small class="hint">(ไม่มีในตาราง ใช้ไซส์จากใบงานครั้งก่อนของรถคันนี้ ตรวจก่อน)</small>':'<p class="err" style="margin:6px 0 0;font-weight:700">⚠️ รุ่นนี้ไม่มีในตารางของร้าน ระบบไม่ลงไซส์ให้ เลือกประเภทล้างรถ ไซส์ฟิล์มกรองแสง และไซส์ฟิล์มใสให้ครบก่อน ถ้าไม่แน่ใจให้ถามเจ้าของร้าน</p>'))+'</div><div class="strip">'+
+    cell("ประเภทล้างรถ","ctxWash",WASH_KEYS.map(function(k){return [k,WASH[k].t]}),c.wash,a.wash,c.wash?esc(WASH[c.wash].d):"")+
     cell("ไซส์ฟิล์มกรองแสง","ctxTint",TINT.map(function(t){return [t,TINT_LABEL[t]||t]}),c.tint,a.tint,"จากตารางไซส์ของร้าน")+
     cell("ไซส์ฟิล์มใส","ctxPpf",PPF.map(function(p){return [p,p]}),c.ppf,a.ppf,"คำนวณจากขนาดตัวรถ")+"</div>"+
     '<label class="switch"><input type="checkbox" id="ctxPk"'+(c.pk?" checked":"")+"> รถกระบะ (Interior Care คิดราคาเท่า Sedan)</label>";
@@ -1169,9 +1171,8 @@ var sampleReady=Promise.resolve().then(function(){return window.claude&&window.c
 }).then(function(l){S.photoOK=!!(sampleFn&&l&&l.images);S.maxImg=Math.min(3,(l&&l.images&&l.images.maxCount)||3);renderPhoto()}).catch(function(){S.photoOK=false;renderPhoto()});
 var PROMPT=[
  "These are 1 to 3 photos of ONE customer's vehicle at a car detailing shop in Thailand. They may show the whole vehicle, its licence plate, and a small white Corner Space warranty sticker (usually inside the door frame) with handwritten fields: Warranty (the program name, e.g. Butterfly+, with the number of years in brackets), Expiry Date (day-month-year; the year is usually 2 digits in the Thai Buddhist calendar, e.g. 71 means 2571). The Contact number printed on the sticker is the shop's own: ignore it.",
- 'Reply with only one JSON object: {"kind":"car"|"motorcycle"|"unknown","brand":string|null,"model":string|null,"plate":string|null,"plate_type":"red"|"normal"|"none"|"unknown","province":string|null,"cc":number|null,"color":string|null,"body":"sedan"|"hatchback"|"coupe"|"suv"|"pickup"|"pickup4"|"mpv"|"van"|null,"confidence":"high"|"medium"|"low","warranty":{"program":string|null,"years":number|null,"expiry":{"d":number,"m":number,"y":number}|null}|null}.',
+ 'Reply with only one JSON object: {"kind":"car"|"motorcycle"|"unknown","brand":string|null,"model":string|null,"plate":string|null,"plate_type":"red"|"normal"|"none"|"unknown","province":string|null,"cc":number|null,"color":string|null,"confidence":"high"|"medium"|"low","warranty":{"program":string|null,"years":number|null,"expiry":{"d":number,"m":number,"y":number}|null}|null}.',
  "brand and model: as sold in Thailand, in English letters (for example Honda and Civic, Honda and CR-V, Toyota and Hilux Revo, Mercedes-Benz and GLC). The Toyota Land Cruiser Prado / Land Cruiser 250 is model Prado.",
- "body: the body shape of a car (pickup4 for a 4-door double-cab pickup truck, pickup for any other pickup truck (single cab or extended cab), suv for SUV/PPV, mpv for people carriers such as Alphard, Vellfire, Carnival, Denza D9), or null for a motorcycle.",
  "plate: the Thai licence plate characters and digits exactly as printed (for example 1กข 1234 or กษ 9941), without the province line (the province goes in the province field). Use null when the plate is not clearly legible. Never guess a plate. plate_type: \"red\" when the plate has a red background (a temporary dealer plate on a new car, usually with a red Thai-letter-and-digits number); \"normal\" for any other plate; \"none\" when the front or rear of the vehicle is clearly visible and has no plate fitted at all (new car from a showroom); \"unknown\" when you cannot tell.",
  "cc: for a motorcycle, the engine displacement in cc if you can tell it from the model, otherwise null. Use null for cars.",
  "province: the province name printed under the plate number on the plate, in Thai (for example สระบุรี), or null if not legible.",
@@ -1269,7 +1270,9 @@ function applyPhoto(r){
     setKind("car");
     var c=matchCar(brand,model);
     if(c){pickCar(c);found=c.b+" "+c.m;parts0.found=1}
-    else{$("#carQ").value=(brand+" "+model).trim();customCar(r.body);found=S.car.label+(S.car.auto.guess?" (ไม่อยู่ในตาราง ไซส์เป็นค่าประมาณจากทรงรถ ตรวจก่อน)":" (ไม่อยู่ในตาราง ตรวจไซส์ก่อน)")}
+    else{var lbl=(brand+" "+model).trim(),lp=norm(plate);$("#carQ").value=lbl;
+      var pj=lp?S.jobs.filter(function(j){return norm(j.plate)===lp&&j.car===lbl&&j.wash}).sort(function(x,y){return y.createdAt-x.createdAt})[0]:null;
+      customCar(pj);found=S.car.label+(S.car.auto.hist?" (ไม่มีในตาราง ใช้ไซส์จากใบงานครั้งก่อน)":" (ไม่มีในตาราง ต้องเลือกไซส์เอง)")}
   }
   if(r.plate_type==="red")plate=("ป้ายแดง "+plate).trim();
   if(plate&&!$("#plate").value.trim())$("#plate").value=plate;
@@ -1285,7 +1288,7 @@ function applyPhoto(r){
   if(S.reg)parts.push("ป้ายรับประกัน "+S.reg.g+(S.reg.e?" หมด "+dstr(new Date(S.reg.e+"T12:00:00").getTime()):" (อ่านวันหมดอายุไม่ได้)"));
   else if(S.kind==="car")parts.push("ไม่พบป้ายประกันในรูป (ถ้ามีป้าย ถ่ายให้เห็นทั้งป้ายชัดๆ หรือกรอกวันหมดอายุในหน้าถัดไป)");
   if(!parts.length){setStatus("อ่านข้อมูลจากรูปนี้ไม่ได้ ลองถ่ายให้เห็นตัวรถและป้ายชัดขึ้น หรือกรอกเองด้านล่าง",true);refresh();return}
-  setStatus("อ่านได้: "+parts.join(" · ")+(CONF[r.confidence]?" (ความมั่นใจ"+CONF[r.confidence]+")":"")+" ตรวจให้ตรงกับรถจริงก่อนไปต่อ",r.confidence==="low");
+  setStatus("อ่านได้: "+parts.join(" · ")+(CONF[r.confidence]?" (ความมั่นใจ"+CONF[r.confidence]+")":"")+" ตรวจให้ตรงกับรถจริงก่อนไปต่อ",r.confidence==="low"||ctxMissing());
   refresh();
 }
 function photoErr(e){
