@@ -196,6 +196,7 @@ a.btn{display:inline-flex;align-items:center;justify-content:center;text-decorat
 .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .newcust{margin-top:12px;padding:16px;border:2px solid var(--yellow);border-radius:14px;background:var(--card);display:grid;gap:10px}
 .editbanner{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:12px 14px;border:2px solid var(--yellow);border-radius:14px;background:var(--card);font-weight:600}
+.custbig{margin:10px 0 6px;padding:10px 14px;border-radius:12px;background:var(--bg);border:1px solid var(--line)}.custbig .cbn{font-size:1.5rem;font-weight:800;line-height:1.25;word-break:break-word}.custbig .cbp{font-size:1.35rem;font-weight:700;letter-spacing:.5px;margin-top:2px}
 .editbanner[hidden],.newcust[hidden],.checks[hidden]{display:none}
 .cshots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .cshot{position:relative;aspect-ratio:4/3;border:2px dashed var(--edge);border-radius:14px;background:var(--card);color:var(--fg,inherit);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0;overflow:hidden;cursor:pointer;font:inherit;min-height:44px}
@@ -816,6 +817,8 @@ function repriceEdit(){
   });
   S.editCtx0=JSON.parse(JSON.stringify(n));
 }
+function isReturning(){var pl=norm($("#plate").value);return (pl&&S.jobs.some(function(j){return norm(j.plate)===pl}))||matchedCust().length>0}
+function fmtPhone(p){var d=String(p).replace(/\D/g,"");return d.length===10?d.slice(0,3)+"-"+d.slice(3,6)+"-"+d.slice(6):d.length===9?d.slice(0,2)+"-"+d.slice(2,5)+"-"+d.slice(5):String(p)}
 function renderPage(){
   renderReg();
   var card=S.reveal&&!S.edit&&!S.fail&&S.ctx&&!ctxMissing();
@@ -823,9 +826,10 @@ function renderPage(){
   var rc=$("#readCard");rc.hidden=!card;
   if(card){
     var tags=S.kind==="moto"?'<span class="tag">มอเตอร์ไซค์ '+S.ctx.cc+" cc</span>":'<span class="tag">ล้าง '+WASH[S.ctx.wash].t+(S.ctx.pk?" (กระบะ)":"")+'</span><span class="tag">ฟิล์มกรองแสง '+esc(TINT_LABEL[S.ctx.tint]||S.ctx.tint)+'</span><span class="tag">ฟิล์มใส '+S.ctx.ppf+"</span>";
-    var cu=[$("#cname").value.trim(),$("#phone").value.trim()].filter(Boolean).join(" · ");
+    var cn0=$("#cname").value.trim(),cp0=$("#phone").value.trim();
+    var cuBox=(cn0||cp0)?'<div class="custbig"><div class="cbn">'+esc(cn0||"ไม่มีชื่อ")+'</div>'+(cp0?'<div class="cbp">'+esc(fmtPhone(cp0))+'</div>':"")+'</div>':"";
     var pv=$("#plate").value.trim();
-    rc.innerHTML='<div style="min-width:0"><div>'+(pv?'<span class="plate">'+esc(pv)+"</span> ":'<input class="in" id="plateQuick" aria-label="ทะเบียนรถ" placeholder="อ่านทะเบียนไม่ได้ พิมพ์ทะเบียนตรงนี้" style="max-width:260px;margin-bottom:6px"><br>')+esc(S.car.label)+(S.member?' <span class="tag member">สมาชิก</span>':"")+'</div><div class="hint">'+esc([$("#color").value.trim()?"สี"+$("#color").value.trim():"",cu].filter(Boolean).join(" · "))+'</div><div class="hint">'+esc($("#custInfo").textContent)+'</div><div class="tags" style="margin:6px 0 0">'+tags+'</div></div><button type="button" class="btn ghost sm" id="editInfo">แก้ไขข้อมูล</button>';
+    rc.innerHTML='<div style="min-width:0"><div>'+(pv?'<span class="plate">'+esc(pv)+"</span> ":'<input class="in" id="plateQuick" aria-label="ทะเบียนรถ" placeholder="อ่านทะเบียนไม่ได้ พิมพ์ทะเบียนตรงนี้" style="max-width:260px;margin-bottom:6px"><br>')+esc(S.car.label)+(S.member?' <span class="tag member">สมาชิก</span>':"")+'</div>'+cuBox+'<div class="hint">'+esc($("#color").value.trim()?"สี"+$("#color").value.trim():"")+'</div><div class="hint">'+esc($("#custInfo").textContent)+'</div><div class="tags" style="margin:6px 0 0">'+tags+'</div></div><button type="button" class="btn ghost sm" id="editInfo">แก้ไขข้อมูล</button>';
   }
   var nm=$("#cname").value.trim(),ph=$("#phone").value.trim();
   if(card&&(!nm||!ph))S.ncShow=true;
@@ -893,6 +897,7 @@ function lookup(){
   var fill=function(id,key,v){var el=$("#"+id),cur=el.value.trim();if(!cur||cur===af[key]){el.value=v||"";af[key]=v||""}};
   var last=hist[0],src=last||(mc[0]&&{name:mc[0].n,phone:mc[0].p});
   if(src){fill("cname","n",src.name);fill("phone","p",src.phone);if(last&&!$("#color").value.trim()&&last.color)$("#color").value=last.color}
+  else{fill("cname","n","");fill("phone","p","")}
   if(!S.editJobId&&!S.car){
     var cl=last?{kind:last.kind||"car",car:last.car,cc:last.cc,prov:last.prov}:(mc[0]&&mc[0].c?{kind:"car",car:mc[0].c}:null);
     if(cl&&cl.car){
@@ -909,7 +914,6 @@ function lookup(){
     }
   }
   if(last&&last.prov&&!$("#prov").value.trim())$("#prov").value=last.prov;
-  else{fill("cname","n","");fill("phone","p","")}
   var now=Date.now(),seen={},act=[];
   mc.forEach(function(m){if(expOf(m)>now)act.push({n:progOf(m),exp:expOf(m)})});
   hist.forEach(function(j){
@@ -1223,7 +1227,10 @@ function onPhoto(files){
       if(S.reg){S.memberManual=false;lookup();setStatus("อ่านป้ายประกันได้: "+S.reg.g+(S.reg.e?" หมด "+dstr(new Date(S.reg.e+"T12:00:00").getTime()):"")+" ตรวจให้ตรงกับป้ายก่อนไปต่อ")}
       else setStatus((prev||"")+" · ป้ายประกัน: ไม่พบ (ผลอ่าน "+(S.stkRaw||"-")+")")
     })}
-  }).catch(photoErr).then(function(){S.photoBusy=false;S.ctl=null;S.reveal=true;S.fail=!S.okRead;renderPhoto();refresh()});
+  }).catch(photoErr).then(function(){S.photoBusy=false;S.ctl=null;S.reveal=true;S.fail=!S.okRead;renderPhoto();refresh();
+    /* ลูกค้าเดิม (มีชื่อ+เบอร์จากประวัติ) และรู้ไซส์รถแล้ว: ไปหน้าเลือกโปรแกรมเลย */
+    if(S.page===1&&S.okRead&&!S.fail&&!S.editJobId&&S.ctx&&!ctxMissing()&&S.lastConf!=="low"&&isReturning()&&$("#cname").value.trim()&&$("#phone").value.trim()){goPage(2);toast("ลูกค้าเดิม ไปหน้าเลือกโปรแกรมแล้ว")}
+  });
 }
 var CONF={high:"สูง",medium:"ปานกลาง",low:"ต่ำ"};
 function regFrom(w0){
@@ -1258,7 +1265,7 @@ function applyPhoto(r){
   if(!r||typeof r!=="object"||Array.isArray(r))throw {code:"invalid_json"};
   var brand=String(r.brand||"").trim(),model=String(r.model||"").trim();
   var plate=String(r.plate||"").trim(),color=String(r.color||"").trim();
-  var moto=r.kind==="motorcycle",found="",parts0={};
+  var moto=r.kind==="motorcycle",found="",parts0={};S.lastConf=r.confidence||"";
   if(moto){
     setKind("moto");
     if(!$("#motoName").value.trim()&&(brand||model))$("#motoName").value=(brand+" "+model).trim();
@@ -1420,7 +1427,9 @@ function renderCtx(){
   if(S.page!==2||!S.ctx){el.innerHTML="";return}
   var tags=S.kind==="moto"?'<span class="tag">มอเตอร์ไซค์ '+S.ctx.cc+" cc</span>":
     '<span class="tag">ล้าง '+WASH[S.ctx.wash].t+(S.ctx.pk?" (กระบะ)":"")+'</span><span class="tag">ฟิล์มกรองแสง '+esc(TINT_LABEL[S.ctx.tint]||S.ctx.tint)+'</span><span class="tag">ฟิล์มใส '+S.ctx.ppf+"</span>";
-  el.innerHTML='<div><span class="plate">'+esc($("#plate").value.trim())+"</span> "+esc(S.car.label)+(S.member?' <span class="tag member">สมาชิก</span>':"")+'</div><div class="tags" style="margin:0">'+tags+'</div><button type="button" class="linkbtn" id="editCar"'+(S.editJobId&&!S.owner?" hidden":"")+'>แก้ไขข้อมูลรถ</button>';
+  var cn1=$("#cname").value.trim(),cp1=$("#phone").value.trim();
+  var cb1=(cn1||cp1)?'<div class="custbig" style="margin:6px 0"><div class="cbn">'+esc(cn1||"ไม่มีชื่อ")+'</div>'+(cp1?'<div class="cbp">'+esc(fmtPhone(cp1))+'</div>':"")+(S.editJobId?"":'<div class="hint" style="font-size:.85rem;margin-top:4px">'+esc($("#custInfo").textContent)+'</div>')+'</div>':"";
+  el.innerHTML='<div><span class="plate">'+esc($("#plate").value.trim())+"</span> "+esc(S.car.label)+(S.member?' <span class="tag member">สมาชิก</span>':"")+'</div>'+cb1+'<div class="tags" style="margin:0">'+tags+'</div><button type="button" class="linkbtn" id="editCar"'+(S.editJobId&&!S.owner?" hidden":"")+'>แก้ไขข้อมูลรถ</button>';
 }
 var PANES=[["f","กระจกหน้า","หน้า"],["fs","ข้างหน้า (ซ้าย-ขวา)","ข้างหน้า"],["rs","ข้างหลัง (ซ้าย-ขวา)","ข้างหลัง"],["r","กระจกหลัง","หลัง"],["sr","ซันรูฟ","ซันรูฟ"]];
 function panesHtml(l,x){
