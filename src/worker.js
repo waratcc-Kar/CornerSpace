@@ -211,6 +211,23 @@ async function api(req, env, url) {
     return new Response('{"seq":' + seq + ',"changes":[' + out.join(",") + "]}", { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
   }
 
+  /* ยกเลิกใบงาน (เฉพาะเจ้าของ): ย้ายไปเก็บที่ jobs_cancelled ไม่ลบรูป กู้คืนได้ */
+  if (parts[0] === "jobs" && ID_RE.test(parts[1] || "") && parts[2] === "cancel" && m === "POST") {
+    if (!u.owner) return fail(403, "owner_only", "ยกเลิกใบงานได้เฉพาะเจ้าของร้าน");
+    const cur = await getDoc(env, "jobs", parts[1]);
+    if (!cur) return fail(404, "not_found", "ไม่พบใบงาน");
+    if (cur.status === "delivered") return fail(409, "delivered", "ใบงานนี้ชำระเงินแล้ว ยกเลิกไม่ได้");
+    let body = {};
+    try { body = (await readJson(req)) || {}; } catch (e) { body = {}; }
+    const arch = Object.assign({}, cur, { cancelledAt: Date.now(), cancelledBy: u.email || "", cancelReason: String(body.reason || "").slice(0, 200) });
+    await env.DB.batch([
+      env.DB.prepare(SEQ_BUMP),
+      env.DB.prepare(UPSERT).bind("jobs_cancelled", parts[1], JSON.stringify(arch), Number(cur.createdAt) || 0),
+      env.DB.prepare("UPDATE docs SET del = 1, data = '{}', upd = (SELECT v FROM meta WHERE k = 'seq') WHERE coll = 'jobs' AND id = ?1").bind(parts[1])
+    ]);
+    return json({ ok: true });
+  }
+
   if (parts[0] === "d" && COLLS.has(parts[1]) && ID_RE.test(parts[2] || "")) {
     const coll = parts[1], id = parts[2];
     if (m === "GET") {
@@ -233,7 +250,10 @@ async function api(req, env, url) {
       if (r.tooBig) return fail(413, "too_big", "ข้อมูลใหญ่เกินไป");
       return json({ ok: true });
     }
-    if (m === "DELETE") { await delDoc(env, coll, id); return json({ ok: true }); }
+    if (m === "DELETE") {
+      if (coll === "jobs" && !u.owner) return fail(403, "owner_only", "ลบใบงานได้เฉพาะเจ้าของร้าน");
+      await delDoc(env, coll, id); return json({ ok: true });
+    }
   }
 
   if (parts[0] === "img" && parts[1] && m === "GET") {
