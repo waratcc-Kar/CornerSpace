@@ -1118,7 +1118,7 @@ function pickCar(c){
   $("#carQ").value=S.car.label;$("#carList").hidden=true;$("#carQ").setAttribute("aria-expanded","false");
   refresh();
 }
-var BODY_AUTO={suv:{wash:"SUV",tint:"L",ppf:"XL"},pickup:{wash:"SUV",tint:"L",ppf:"L"},mpv:{wash:"MPV",tint:"XL",ppf:"XL"},van:{wash:"MPV",tint:"XL",ppf:"XL"}};
+var BODY_AUTO={suv:{wash:"SUV",tint:"L",ppf:"XL"},pickup:{wash:"SUV",tint:"M",ppf:"L"},pickup4:{wash:"SUV",tint:"M",ppf:"XL"},mpv:{wash:"MPV",tint:"XL",ppf:"XL"},van:{wash:"MPV",tint:"XL",ppf:"XL"}};
 function customCar(body){
   var label=$("#carQ").value.trim()||"รถรุ่นอื่น";
   var ba=BODY_AUTO[String(body||"").toLowerCase()];
@@ -1169,9 +1169,9 @@ var sampleReady=Promise.resolve().then(function(){return window.claude&&window.c
 }).then(function(l){S.photoOK=!!(sampleFn&&l&&l.images);S.maxImg=Math.min(3,(l&&l.images&&l.images.maxCount)||3);renderPhoto()}).catch(function(){S.photoOK=false;renderPhoto()});
 var PROMPT=[
  "These are 1 to 3 photos of ONE customer's vehicle at a car detailing shop in Thailand. They may show the whole vehicle, its licence plate, and a small white Corner Space warranty sticker (usually inside the door frame) with handwritten fields: Warranty (the program name, e.g. Butterfly+, with the number of years in brackets), Expiry Date (day-month-year; the year is usually 2 digits in the Thai Buddhist calendar, e.g. 71 means 2571). The Contact number printed on the sticker is the shop's own: ignore it.",
- 'Reply with only one JSON object: {"kind":"car"|"motorcycle"|"unknown","brand":string|null,"model":string|null,"plate":string|null,"plate_type":"red"|"normal"|"none"|"unknown","province":string|null,"cc":number|null,"color":string|null,"body":"sedan"|"hatchback"|"coupe"|"suv"|"pickup"|"mpv"|"van"|null,"confidence":"high"|"medium"|"low","warranty":{"program":string|null,"years":number|null,"expiry":{"d":number,"m":number,"y":number}|null}|null}.',
+ 'Reply with only one JSON object: {"kind":"car"|"motorcycle"|"unknown","brand":string|null,"model":string|null,"plate":string|null,"plate_type":"red"|"normal"|"none"|"unknown","province":string|null,"cc":number|null,"color":string|null,"body":"sedan"|"hatchback"|"coupe"|"suv"|"pickup"|"pickup4"|"mpv"|"van"|null,"confidence":"high"|"medium"|"low","warranty":{"program":string|null,"years":number|null,"expiry":{"d":number,"m":number,"y":number}|null}|null}.',
  "brand and model: as sold in Thailand, in English letters (for example Honda and Civic, Honda and CR-V, Toyota and Hilux Revo, Mercedes-Benz and GLC). The Toyota Land Cruiser Prado / Land Cruiser 250 is model Prado.",
- "body: the body shape of a car (pickup for any pickup truck, suv for SUV/PPV, mpv for people carriers such as Alphard, Vellfire, Carnival, Denza D9), or null for a motorcycle.",
+ "body: the body shape of a car (pickup4 for a 4-door double-cab pickup truck, pickup for any other pickup truck (single cab or extended cab), suv for SUV/PPV, mpv for people carriers such as Alphard, Vellfire, Carnival, Denza D9), or null for a motorcycle.",
  "plate: the Thai licence plate characters and digits exactly as printed (for example 1กข 1234 or กษ 9941), without the province line (the province goes in the province field). Use null when the plate is not clearly legible. Never guess a plate. plate_type: \"red\" when the plate has a red background (a temporary dealer plate on a new car, usually with a red Thai-letter-and-digits number); \"normal\" for any other plate; \"none\" when the front or rear of the vehicle is clearly visible and has no plate fitted at all (new car from a showroom); \"unknown\" when you cannot tell.",
  "cc: for a motorcycle, the engine displacement in cc if you can tell it from the model, otherwise null. Use null for cars.",
  "province: the province name printed under the plate number on the plate, in Thai (for example สระบุรี), or null if not legible.",
