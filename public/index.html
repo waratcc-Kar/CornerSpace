@@ -345,7 +345,7 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
     </div>
 
     <div id="p2" hidden>
-      <div class="editbanner" id="editBanner" hidden><span id="editBannerTx"></span><button type="button" class="btn ghost sm" id="editUndoDone" hidden>กดเสร็จผิด ย้อนเป็นกำลังทำ</button><button type="button" class="btn ghost sm" id="editCancel">ยกเลิกการแก้ไข</button></div>
+      <div class="editbanner" id="editBanner" hidden><span id="editBannerTx"></span><button type="button" class="btn ghost sm" id="editAddPhoto">เพิ่มรูปรถ</button><button type="button" class="btn ghost sm" id="editUndoDone" hidden>กดเสร็จผิด ย้อนเป็นกำลังทำ</button><button type="button" class="btn ghost sm" id="editCancel">ยกเลิกการแก้ไข</button></div>
       <div class="ctxbar" id="ctxBar"></div>
       <div id="histBar"></div>
       <h2 id="navTitle">เลือกโปรแกรม</h2>
@@ -2182,7 +2182,8 @@ function wire(){
     Promise.all(fl.map(function(f){return shrinkToDataUrl(f,640,0.5).catch(function(){return null})})).then(function(us){
       us=us.filter(Boolean);if(!us.length){toast("ใช้รูปนี้ไม่ได้ ลองใหม่");return}
       var cur=S.jobs.filter(function(x){return x.id===id})[0]||j,sh=Object.assign({},cur.shots||{}),n=0;
-      us.forEach(function(u){do{n++}while(sh["เพิ่ม "+n]);sh["เพิ่ม "+n]=u});
+      var add={};us.forEach(function(u){do{n++}while(sh["เพิ่ม "+n]||(S.cshots&&S.editJobId===id&&S.cshots["เพิ่ม "+n]));sh["เพิ่ม "+n]=u;add["เพิ่ม "+n]=u});
+      if(S.editJobId===id){S.cshots=Object.assign({},S.cshots||{},add);try{drawShots()}catch(x){}}
       updJob(id,{shots:sh}).then(function(){toast("เพิ่มรูปแล้ว "+us.length+" รูป")},function(){toast("เพิ่มรูปไม่สำเร็จ ลองอีกครั้ง")});
     });
   });
@@ -2202,6 +2203,7 @@ function wire(){
     }
   });
   $("#editCancel").addEventListener("click",function(){resetForm();setTab("queue")});
+  $("#editAddPhoto").addEventListener("click",function(){if(!S.editJobId)return;S.photoJob=S.editJobId;var pin=$("#jobPhotoIn");pin.value="";pin.click()});
   $("#editUndoDone").addEventListener("click",function(){var id=S.editJobId,j=id&&S.jobs.filter(function(x){return x.id===id})[0];if(!j||j.status!=="done"){toast("ใบนี้ย้อนสถานะไม่ได้");return}updJob(id,{status:"working",doneAt:null}).then(function(){toast("ย้อนเป็นกำลังทำแล้ว");resetForm();S.filter="working";setTab("queue")},function(){toast("ทำรายการไม่สำเร็จ ลองอีกครั้ง")})});
   $("#ctxBar").addEventListener("click",function(e){if(e.target.id==="editCar")goPage(1)});
   $("#lines").addEventListener("input",function(e){
