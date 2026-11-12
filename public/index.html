@@ -1428,8 +1428,10 @@ function renderCtx(){
   var tags=S.kind==="moto"?'<span class="tag">มอเตอร์ไซค์ '+S.ctx.cc+" cc</span>":
     '<span class="tag">ล้าง '+WASH[S.ctx.wash].t+(S.ctx.pk?" (กระบะ)":"")+'</span><span class="tag">ฟิล์มกรองแสง '+esc(TINT_LABEL[S.ctx.tint]||S.ctx.tint)+'</span><span class="tag">ฟิล์มใส '+S.ctx.ppf+"</span>";
   var cn1=$("#cname").value.trim(),cp1=$("#phone").value.trim();
-  var cb1=(cn1||cp1)?'<div class="custbig" style="margin:6px 0"><div class="cbn">'+esc(cn1||"ไม่มีชื่อ")+'</div>'+(cp1?'<div class="cbp">'+esc(fmtPhone(cp1))+'</div>':"")+(S.editJobId?"":'<div class="hint" style="font-size:.85rem;margin-top:4px">'+esc($("#custInfo").textContent)+'</div>')+'</div>':"";
-  el.innerHTML='<div><span class="plate">'+esc($("#plate").value.trim())+"</span> "+esc(S.car.label)+(S.member?' <span class="tag member">สมาชิก</span>':"")+'</div>'+cb1+'<div class="tags" style="margin:0">'+tags+'</div><button type="button" class="linkbtn" id="editCar"'+(S.editJobId&&!S.owner?" hidden":"")+'>แก้ไขข้อมูลรถ</button>';
+  var cb1=(cn1||cp1)?'<div class="custbig" style="margin:6px 0;flex:1 1 100%"><div class="cbn">'+esc(cn1||"ไม่มีชื่อ")+'</div>'+(cp1?'<div class="cbp">'+esc(fmtPhone(cp1))+'</div>':"")+(S.editJobId?"":'<div class="hint" style="font-size:.85rem;margin-top:4px">'+esc($("#custInfo").textContent)+'</div>')+'</div>':"";
+  var ej2=S.editJobId&&S.jobs.filter(function(x){return x.id===S.editJobId})[0];
+  var ph2=(S.shotUrls&&S.shotUrls[0])||(ej2&&ej2.thumb)||"",pl2=$("#plate").value.trim(),pv2=$("#prov").value.trim();
+  el.innerHTML='<div class="jh" style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;width:100%;flex:1 1 100%"><div style="min-width:0"><div class="carname" style="margin:0">'+esc(S.car.label)+'</div>'+($("#color").value.trim()?'<div class="hint">สี'+esc($("#color").value.trim())+'</div>':"")+(S.member?'<span class="tag member" style="margin-top:4px;display:inline-block">สมาชิก</span>':"")+'</div><div class="jr2">'+(ph2?'<img class="jthumb ctxthumb" src="'+ph2+'" alt="รูปรถ" style="width:96px;height:72px">':"")+(pl2?'<div class="lp" aria-label="ทะเบียน"><b>'+esc(pl2)+"</b>"+(pv2?"<small>"+esc(pv2)+"</small>":"")+"</div>":"")+'</div></div>'+cb1+'<div class="tags" style="margin:0">'+tags+'</div><button type="button" class="linkbtn" id="editCar"'+(S.editJobId&&!S.owner?" hidden":"")+'>แก้ไขข้อมูลรถ</button>';
 }
 var PANES=[["f","กระจกหน้า","หน้า"],["fs","ข้างหน้า (ซ้าย-ขวา)","ข้างหน้า"],["rs","ข้างหลัง (ซ้าย-ขวา)","ข้างหลัง"],["r","กระจกหลัง","หลัง"],["sr","ซันรูฟ","ซันรูฟ"]];
 function panesHtml(l,x){
@@ -2205,7 +2207,7 @@ function wire(){
   $("#editCancel").addEventListener("click",function(){resetForm();setTab("queue")});
   $("#editAddPhoto").addEventListener("click",function(){if(!S.editJobId)return;S.photoJob=S.editJobId;var pin=$("#jobPhotoIn");pin.value="";pin.click()});
   $("#editUndoDone").addEventListener("click",function(){var id=S.editJobId,j=id&&S.jobs.filter(function(x){return x.id===id})[0];if(!j||j.status!=="done"){toast("ใบนี้ย้อนสถานะไม่ได้");return}updJob(id,{status:"working",doneAt:null}).then(function(){toast("ย้อนเป็นกำลังทำแล้ว");resetForm();S.filter="working";setTab("queue")},function(){toast("ทำรายการไม่สำเร็จ ลองอีกครั้ง")})});
-  $("#ctxBar").addEventListener("click",function(e){if(e.target.id==="editCar")goPage(1)});
+  $("#ctxBar").addEventListener("click",function(e){if(e.target.id==="editCar"){goPage(1);return}var im=e.target.closest(".ctxthumb");if(im){var z=$("#zoom");z.querySelector("img").src=im.src;z.hidden=false}});
   $("#lines").addEventListener("input",function(e){
     var row=e.target.closest(".line");if(!row)return;
     var l=S.lines[+row.dataset.i];
