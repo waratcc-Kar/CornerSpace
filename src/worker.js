@@ -457,6 +457,9 @@ async function autoEnabled(env) {
 const NEW_ROUND_MS = 30 * 60e3;
 
 /* แจ้งเจ้าของร้านทาง LINE เมื่อ AI ตอบเองไม่ได้/ต้องมีคนดูต่อ (ตั้ง settings/ai.notify = [LINE userId]) */
+// ลิงก์ในแจ้งเตือนเจ้าของ: ใช้โดเมนที่ระบบถูกเรียกใช้อยู่ (ย้ายโดเมนแล้วลิงก์ตามไปเอง)
+let APP_ORIGIN = "https://karnet.org";
+
 async function notifyOwner(env, uid, why) {
   try {
     const cfg = await getDoc(env, "settings", "ai");
@@ -464,7 +467,7 @@ async function notifyOwner(env, uid, why) {
     if (!ids.length) return;
     const th = await env.DB.prepare("SELECT name FROM chat_threads WHERE user_id = ?1").bind(uid).first();
     const last = await env.DB.prepare("SELECT text FROM chat_msgs WHERE user_id = ?1 AND dir = 'in' ORDER BY id DESC LIMIT 1").bind(uid).first();
-    const msg = "🔔 ลูกค้าต้องให้ดูเอง\nชื่อ: " + ((th && th.name) || "ลูกค้า") + "\nถามว่า: " + String((last && last.text) || "").slice(0, 200) + "\nเหตุผล: " + String(why || "AI ไม่แน่ใจ").slice(0, 200) + "\nเปิดดูและตอบ: https://karnet.org";
+    const msg = "🔔 ลูกค้าต้องให้ดูเอง\nชื่อ: " + ((th && th.name) || "ลูกค้า") + "\nถามว่า: " + String((last && last.text) || "").slice(0, 200) + "\nเหตุผล: " + String(why || "AI ไม่แน่ใจ").slice(0, 200) + "\nเปิดดูและตอบ: " + APP_ORIGIN;
     for (const id of ids) { try { await linePush(env, id, msg); } catch (e) { console.error("notify owner failed", e); } }
   } catch (e) { console.error("notify owner failed", e); }
 }
@@ -709,6 +712,7 @@ async function pubAsk(req, env) {
 export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
+    if (/(^|\.)karnet\.org$/.test(url.hostname)) APP_ORIGIN = url.origin;
     try {
       if (url.pathname === "/pub/ask") return await pubAsk(req, env);
       if (url.pathname === "/line-webhook") return await lineWebhook(req, env, ctx);
