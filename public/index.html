@@ -344,7 +344,7 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
     </div>
 
     <div id="p2" hidden>
-      <div class="editbanner" id="editBanner" hidden><span id="editBannerTx"></span><button type="button" class="btn ghost sm" id="editCancel">ยกเลิกการแก้ไข</button></div>
+      <div class="editbanner" id="editBanner" hidden><span id="editBannerTx"></span><button type="button" class="btn ghost sm" id="editUndoDone" hidden>กดเสร็จผิด ย้อนเป็นกำลังทำ</button><button type="button" class="btn ghost sm" id="editCancel">ยกเลิกการแก้ไข</button></div>
       <div class="ctxbar" id="ctxBar"></div>
       <div id="histBar"></div>
       <h2 id="navTitle">เลือกโปรแกรม</h2>
@@ -841,6 +841,7 @@ function renderPage(){
   ["plate","prov","color","cname","phone","member","ncName","ncPhone"].forEach(function(i){var e=$("#"+i);if(e)e.disabled=!!S.editJobId});
   $$("#kind button").forEach(function(b){b.disabled=!!S.editJobId});
   var eb=$("#editBanner");eb.hidden=!S.editJobId;
+  var ejd=S.editJobId&&S.jobs.filter(function(x){return x.id===S.editJobId})[0];$("#editUndoDone").hidden=!(ejd&&ejd.status==="done");
   if(S.editJobId){var ej=S.jobs.filter(function(x){return x.id===S.editJobId})[0];$("#editBannerTx").textContent="แก้ไขใบ "+(ej?ej.no:"")+(S.owner?" · แก้รุ่น/ไซส์รถได้ที่ปุ่ม แก้ไขข้อมูลรถ":" · แก้รุ่น/ไซส์รถได้เฉพาะเจ้าของร้าน")+" · ข้อมูลลูกค้าแก้ไม่ได้ · ลบโปรแกรมเดิมไม่ได้ แต่เปลี่ยนเป็นโปรแกรมอื่น เพิ่ม หรือแก้ราคาได้"}
   $("#saveBtn").textContent=S.editJobId?"บันทึกการแก้ไข":"บันทึกใบรับรถ";
   $("#st1").setAttribute("aria-current",S.page===1?"step":"false");
@@ -1773,7 +1774,7 @@ function jobAct(id,act){
     if(bal>0&&sum!==bal){toast(sum<bal?"ยังรับเงินไม่ครบ เลือกเงินสดหรือสแกนจ่ายก่อนส่งมอบ":"ยอดที่ติ๊กเกินยอดที่ต้องชำระ");return}
     p=updJob(id,{status:"delivered",doneAt:j.doneAt||Date.now(),pay:{cash:d.cash.on?Number(d.cash.amt)||0:0,scan:d.scan.on?Number(d.scan.amt)||0:0,paidAt:Date.now()}});
   }else if(act==="next"&&si<STATUS.length-1){var ns=STATUS[si+1][0];p=updJob(id,ns==="done"?{status:ns,doneAt:Date.now()}:{status:ns})}
-  else if(act==="back"&&si>0){var bs=STATUS[si-1][0];p=updJob(id,j.status==="done"?{status:bs,doneAt:null}:{status:bs})}
+  else if(act==="back"&&j.status==="done"){S.editJob=null;S.editD=null;S.payOpen=null;p=updJob(id,{status:"working",doneAt:null})}
   else if(act==="push"){linePush(j.phone,lineSummary(j));return}
   else if(act==="copy"){
     var txt=lineSummary(j);
@@ -2177,6 +2178,7 @@ function wire(){
     }
   });
   $("#editCancel").addEventListener("click",function(){resetForm();setTab("queue")});
+  $("#editUndoDone").addEventListener("click",function(){var id=S.editJobId,j=id&&S.jobs.filter(function(x){return x.id===id})[0];if(!j||j.status!=="done"){toast("ใบนี้ย้อนสถานะไม่ได้");return}updJob(id,{status:"working",doneAt:null}).then(function(){toast("ย้อนเป็นกำลังทำแล้ว");resetForm();S.filter="working";setTab("queue")},function(){toast("ทำรายการไม่สำเร็จ ลองอีกครั้ง")})});
   $("#ctxBar").addEventListener("click",function(e){if(e.target.id==="editCar")goPage(1)});
   $("#lines").addEventListener("input",function(e){
     var row=e.target.closest(".line");if(!row)return;
