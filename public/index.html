@@ -351,15 +351,17 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
       <h2 id="navTitle">เลือกโปรแกรม</h2>
       <div id="nav"></div>
 
-      <h2>สภาพรถตอนรับ</h2>
-      <p class="hint" style="margin:0 0 8px">ถ่ายรูปรอบคันก่อนเริ่มงาน แตะช่องเพื่อถ่าย</p>
-      <div class="cshots" id="cshots"></div>
+      <h2>ค่าบริการอื่น ๆ</h2>
+      <p class="hint" style="margin:0 0 8px">ใส่ชื่อรายการและราคาเอง สำหรับงานที่ไม่มีในโปรแกรมด้านบน (ไม่บังคับ)</p>
+      <div id="others"></div>
+      <button type="button" class="btn ghost sm" id="addOther" style="margin-top:6px">+ เพิ่มรายการ</button>
+      <div class="cshots" id="cshots" hidden></div>
       <input type="file" id="cshotIn" accept="image/*" capture="environment" hidden>
       <input type="file" id="jobPhotoIn" accept="image/*" multiple hidden>
       <div class="checks" id="checks" hidden></div>
-      <label class="f" style="margin-top:10px"><span>รายละเอียด เช่น รอยเดิม / ของมีค่าในรถ (ไม่บังคับ)</span><textarea class="in" id="cond"></textarea></label>
-      <p class="sublabel">แจ้งลูกค้าก่อนรับบริการ</p>
-      <div class="checks" id="confirms" role="group" aria-label="แจ้งลูกค้าแล้ว"></div>
+      <h2>โน้ตลูกค้า</h2>
+      <label class="f"><span>เช่น รอยเดิม ของมีค่าในรถ สิ่งที่ลูกค้าฝากไว้ (ไม่บังคับ)</span><textarea class="in" id="cond"></textarea></label>
+      <div class="checks" id="confirms" hidden></div>
       <h2>สรุปรายการ</h2>
       <div id="lines"></div>
       <div class="sums">
@@ -666,9 +668,18 @@ function sunPrice(l){var x=l.g==="tint"&&TINT_BY[l.o];return x&&x.sun&&l.sun>0&&
 var SUN_L=["ซันรูฟ 1 ช่อง","ซันรูฟ 2 ช่อง","หลังคาแก้ว"];
 function lineAmount(l){if(l.manual!=null)return l.manual;var d=def(l),p=priceFor(d.g,d.o);return p==null?null:p+sunPrice(l)}
 function lineName(l){var d=def(l);return nameOf(d.g,d.o)+(sunPrice(l)?" + "+SUN_L[l.sun-1]:"")}
+/* ค่าบริการอื่น ๆ (กรอกชื่อ+ราคาเอง) เก็บเป็น line กลุ่ม "other" */
+function otherRows(){return (S.others||[]).filter(function(r){return String(r.name||"").trim()||String(r.price||"").trim()!==""})}
+function otherLines(){return otherRows().map(function(r,i){return {g:"other",o:"x"+(i+1),name:String(r.name||"").trim()||"ค่าบริการอื่น ๆ",note:"",price:Math.max(0,Number(r.price)||0),sun:0,pn:null,wy:0}})}
+function renderOthers(){
+  var box=$("#others");if(!box)return;if(!S.others||!S.others.length)S.others=[{name:"",price:""}];
+  box.innerHTML=S.others.map(function(r,i){var miss=String(r.name||"").trim()&&String(r.price||"").trim()==="";
+    return '<div class="orow" data-i="'+i+'" style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input class="in on" style="flex:1;min-width:0" aria-label="ชื่อรายการ" placeholder="ชื่อรายการ เช่น ล้างห้องเครื่อง" value="'+esc(r.name||"")+'"><input class="in op'+(miss?" missing":"")+'" style="width:110px" aria-label="ราคา" type="number" inputmode="numeric" min="0" placeholder="ราคา" value="'+esc(r.price==null?"":String(r.price))+'"><button type="button" class="x" aria-label="ลบรายการ">×</button></div>'}).join("");
+}
 function totals(){
   var sub=0,missing=0;
   S.lines.forEach(function(l){var a=lineAmount(l);if(a==null)missing++;else sub+=a});
+  otherRows().forEach(function(r){if(String(r.price).trim()==="")missing++;else sub+=Math.max(0,Number(r.price)||0)});
   var disc=Number($("#discount").value)||0,dep=Number($("#deposit").value)||0;
   var total=Math.max(0,sub-disc);
   return {sub:sub,total:total,deposit:dep,balance:Math.max(0,total-dep),missing:missing};
@@ -1460,7 +1471,7 @@ function tintExtra(l){
 }
 function renderLines(){
   var box=$("#lines");
-  if(!S.lines.length){box.innerHTML='<p class="empty">ยังไม่ได้เลือกโปรแกรม กดเลือกจากกลุ่มด้านบน</p>';return}
+  if(!S.lines.length){box.innerHTML='<p class="empty">ยังไม่ได้เลือกโปรแกรมจากกลุ่มด้านบน (ค่าบริการอื่น ๆ ดูได้ในแถบสรุปด้านล่าง)</p>';return}
   box.innerHTML=S.lines.map(function(l,i){
     var d=def(l),a=lineAmount(l),v=a!=null?a:"";
     return '<div class="line'+tierCls(l.g,l.o)+'" data-i="'+i+'"><div class="lt"><b>'+esc(lineName(l))+"</b><small>"+esc(sizeLabel(d.g,d.o)+(d.o.desc?" · "+d.o.desc:""))+'</small></div>'+
@@ -1472,12 +1483,14 @@ function renderLines(){
 function renderSum(){
   var el=$("#sumPanel");
   if(S.page!==2){return}
-  if(!S.lines.length){el.innerHTML='<div class="sl"><span>ยังไม่ได้เลือกโปรแกรม</span><b>฿0</b></div>';return}
+  var ors=otherRows();
+  if(!S.lines.length&&!ors.length){el.innerHTML='<div class="sl"><span>ยังไม่ได้เลือกโปรแกรม</span><b>฿0</b></div>';return}
   var t=totals();
-  var rows=S.lines.map(function(l){var a=lineAmount(l);return '<div class="sl'+(a==null?" m":"")+tierCls(l.g,l.o)+'"><span>'+esc(lineName(l))+'</span><b>'+(a==null?"ใส่ราคา":baht(a))+"</b></div>"}).join("");
+  var rows=S.lines.map(function(l){var a=lineAmount(l);return '<div class="sl'+(a==null?" m":"")+tierCls(l.g,l.o)+'"><span>'+esc(lineName(l))+'</span><b>'+(a==null?"ใส่ราคา":baht(a))+"</b></div>"}).join("")+
+    ors.map(function(r){var e=String(r.price).trim()==="";return '<div class="sl'+(e?" m":"")+'"><span>'+esc(String(r.name||"").trim()||"ค่าบริการอื่น ๆ")+'</span><b>'+(e?"ใส่ราคา":baht(Number(r.price)||0))+"</b></div>"}).join("");
   var disc=Number($("#discount").value)||0;
   if(disc)rows+='<div class="sl"><span>ส่วนลด</span><b>-'+baht(disc)+"</b></div>";
-  el.innerHTML='<button type="button" class="sh" id="sumTog" aria-expanded="'+S.sumOpen+'"><span>รายการที่เลือก '+S.lines.length+" รายการ</span><span>"+(S.sumOpen?"ซ่อน ▾":"ดูรายการ ▴")+"</span></button>"+(S.sumOpen?'<div class="sbody">'+rows+"</div>":"");
+  el.innerHTML='<button type="button" class="sh" id="sumTog" aria-expanded="'+S.sumOpen+'"><span>รายการที่เลือก '+(S.lines.length+ors.length)+" รายการ</span><span>"+(S.sumOpen?"ซ่อน ▾":"ดูรายการ ▴")+"</span></button>"+(S.sumOpen?'<div class="sbody">'+rows+"</div>":"");
 }
 function renderBar(){
   var t=totals();renderSum();
@@ -1542,7 +1555,7 @@ function saveJob(){
   if(S.saving)return;
   var plate=$("#plate").value.trim();
   if(!S.ctx){goPage(1);toast(S.kind==="moto"?"ใส่ขนาดเครื่องยนต์ (cc) ก่อนบันทึก":"เลือกรุ่นรถก่อนบันทึก");return}
-  if(!S.lines.length){toast("เลือกโปรแกรมอย่างน้อย 1 รายการ");return}
+  if(!S.lines.length&&!otherRows().length){toast("เลือกโปรแกรมหรือใส่ค่าบริการอื่น ๆ อย่างน้อย 1 รายการ");return}
   var t=totals();
   if(t.missing){toast("ยังมี "+t.missing+" รายการที่ไม่ได้ใส่ราคา");return}
   var moto=S.kind==="moto";
@@ -1557,7 +1570,7 @@ function saveJob(){
     repriceEdit();
     var moto0=S.kind==="moto";
     var patch={shots:Object.assign({},S.cshots||{}),checks:S.checks.slice(),confirms:S.confirms.slice(),cond:$("#cond").value.trim(),
-      lines:S.lines.map(function(l){return {g:l.g,o:l.o,name:lineName(l),note:l.note.trim(),price:lineAmount(l),sun:l.sun||0,pn:l.pn||null,wy:isWarr(l)?wyOf(l):0}}),
+      lines:S.lines.map(function(l){return {g:l.g,o:l.o,name:lineName(l),note:l.note.trim(),price:lineAmount(l),sun:l.sun||0,pn:l.pn||null,wy:isWarr(l)?wyOf(l):0}}).concat(otherLines()),
       discount:Number($("#discount").value)||0,deposit:Number($("#deposit").value)||0,total:t.total,editedBy:by,editedAt:Date.now(),edits:log};
     if(S.owner)Object.assign(patch,{car:S.car.label,wash:moto0?null:S.ctx.wash,tint:moto0?null:S.ctx.tint,ppf:moto0?null:S.ctx.ppf,pk:moto0?false:!!S.ctx.pk,cc:moto0?S.ctx.cc:null});
     S.saving=true;renderBar();
@@ -1572,7 +1585,7 @@ function saveJob(){
     pickup:"",car:S.car.label,
     wash:moto?null:S.ctx.wash,tint:moto?null:S.ctx.tint,ppf:moto?null:S.ctx.ppf,pk:moto?false:!!S.ctx.pk,cc:moto?S.ctx.cc:null,
     checks:S.checks.slice(),confirms:S.confirms.slice(),cond:$("#cond").value.trim(),
-    lines:S.lines.map(function(l){return {g:l.g,o:l.o,name:lineName(l),note:l.note.trim(),price:lineAmount(l),sun:l.sun||0,pn:l.pn||null,wy:isWarr(l)?wyOf(l):0}}),
+    lines:S.lines.map(function(l){return {g:l.g,o:l.o,name:lineName(l),note:l.note.trim(),price:lineAmount(l),sun:l.sun||0,pn:l.pn||null,wy:isWarr(l)?wyOf(l):0}}).concat(otherLines()),
     discount:Number($("#discount").value)||0,deposit:Number($("#deposit").value)||0,total:t.total
   };
   S.saving=true;renderBar();
@@ -1588,7 +1601,7 @@ function saveJob(){
   }).then(function(){S.saving=false;renderBar()});
 }
 function resetForm(){
-  S.editJobId=null;S.editKeys=null;S.cshots={};S.svcForce=false;S.mxOpen=false;
+  S.editJobId=null;S.editKeys=null;S.cshots={};S.svcForce=false;S.mxOpen=false;S.others=[];renderOthers();
   ["plate","prov","cname","phone","color","cond","discount","deposit","carQ","motoName","motoCc"].forEach(function(id){$("#"+id).value=""});
   $("#member").checked=false;S.member=false;S.checks=[];S.confirms=[];S.listId="";S.reveal=false;S.edit=false;S.fail=false;S.ncShow=false;S.memberManual=false;$("#custInfo").textContent="";S.car=null;S.ctx=null;S.lines=[];S.page=1;S.nav=[];
   $$("#checks input,#confirms input").forEach(function(i){i.checked=false});
@@ -1690,7 +1703,7 @@ function renderQueue(){
     var si=0;STATUS.forEach(function(s,k){if(s[0]===j.status)si=k});
     var st=STATUS[si];
     var d=new Date(j.createdAt);
-    var warn=(j.confirms&&j.confirms.length<2)?'<p class="hint">ยังไม่ได้ติ๊กแจ้งลูกค้าครบ ('+(j.confirms?j.confirms.length:0)+"/2)</p>":"";
+    var warn="";
     return '<article class="job" data-id="'+esc(j.id)+'"><div class="jh"><div><div class="jno">'+esc(j.no)+" · "+dstr(j.createdAt)+" "+d.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+
       '</div><div class="carname">'+esc(j.car)+(j.color?" <small>"+esc(j.color)+"</small>":"")+'</div><span class="pill '+j.status+'">'+st[1]+'</span></div><div class="jr2">'+(j.thumb?'<img class="jthumb" src="'+j.thumb+'" alt="รูปรถ '+esc(j.plate)+'">':"")+'<div class="lp" aria-label="ทะเบียน"><b>'+esc(j.plate)+"</b>"+(j.prov?"<small>"+esc(j.prov)+"</small>":"")+"</div></div></div>"+
       '<div class="tags">'+jobTags(j)+(j.member?'<span class="tag member">สมาชิก</span>':"")+"</div>"+
@@ -1714,7 +1727,7 @@ function renderQueue(){
 function startEdit(j){
   if(j.status==="delivered"){toast("ชำระเงินแล้ว แก้ไขรายการไม่ได้");return}
   resetForm();
-  S.editJobId=j.id;S.editKeys={};S.editNames={};j.lines.forEach(function(l){S.editKeys[l.g+"|"+l.o]=1;S.editNames[l.g+"|"+l.o]=l.name});
+  S.editJobId=j.id;S.editKeys={};S.editNames={};j.lines.forEach(function(l){if(l.g==="other")return;S.editKeys[l.g+"|"+l.o]=1;S.editNames[l.g+"|"+l.o]=l.name});
   S.kind=j.kind||"car";
   $("#plate").value=j.plate||"";$("#cname").value=j.name||"";$("#phone").value=j.phone||"";$("#color").value=j.color||"";
   $("#cond").value=j.cond||"";$("#discount").value=j.discount||"";$("#deposit").value=j.deposit||"";
@@ -1733,7 +1746,8 @@ function startEdit(j){
     S.ctx=Object.assign({},auto,{ov:car&&car.ov||null});
     $("#carQ").value=j.car||"";
   }
-  S.lines=j.lines.map(function(l){return {g:l.g,o:l.o,note:l.note||"",manual:l.price,sun:l.sun||0,pn:l.pn||null,wy:l.wy}});
+  S.lines=j.lines.filter(function(l){return l.g!=="other"}).map(function(l){return {g:l.g,o:l.o,note:l.note||"",manual:l.price,sun:l.sun||0,pn:l.pn||null,wy:l.wy}});
+  S.others=j.lines.filter(function(l){return l.g==="other"}).map(function(l){return {name:l.name,price:String(l.price)}});renderOthers();
   S.editCtx0=S.ctx?JSON.parse(JSON.stringify(S.ctx)):null;
   S.reveal=true;S.edit=false;S.fail=false;S.ncShow=false;
   setTab("intake");S.page=2;S.nav=[];refresh();
@@ -2240,6 +2254,21 @@ function wire(){
     if(e.target.classList.contains("x")){var xi=+e.target.closest(".line").dataset.i,xl=S.lines[xi];if(S.editJobId&&xl&&S.editKeys&&S.editKeys[xl.g+"|"+xl.o]){toast("ลบโปรแกรมที่ทำแล้วไม่ได้ เปลี่ยนเป็นโปรแกรมอื่นหรือแก้ราคาแทนได้");return}S.lines.splice(xi,1);refresh()}
   });
   ["discount","deposit"].forEach(function(id){$("#"+id).addEventListener("input",renderBar)});
+  renderOthers();
+  $("#others").addEventListener("input",function(e){
+    var row=e.target.closest(".orow");if(!row)return;var r=S.others[+row.dataset.i];if(!r)return;
+    if(e.target.classList.contains("on"))r.name=e.target.value;else if(e.target.classList.contains("op"))r.price=e.target.value;
+    var pi=row.querySelector(".op");pi.classList.toggle("missing",!!String(r.name||"").trim()&&String(r.price||"").trim()==="");
+    renderBar();try{fdSave()}catch(x){}
+  });
+  $("#others").addEventListener("click",function(e){
+    if(!e.target.classList.contains("x"))return;var row=e.target.closest(".orow");
+    S.others.splice(+row.dataset.i,1);renderOthers();renderBar();try{fdSave()}catch(x){}
+  });
+  $("#addOther").addEventListener("click",function(){
+    (S.others||(S.others=[])).push({name:"",price:""});renderOthers();
+    var ins=$("#others").querySelectorAll(".on");if(ins.length)ins[ins.length-1].focus();
+  });
   $("#saveBtn").addEventListener("click",saveJob);
   $("#sumPanel").addEventListener("click",function(e){if(e.target.closest("#sumTog")){S.sumOpen=!S.sumOpen;renderSum()}});
 
@@ -2325,9 +2354,9 @@ var FD_KEY="cs-formdraft",FD_IDS=["plate","prov","cname","phone","color","cond",
 function fdSave(){
   try{
     if(S.editJobId||S.restoring)return;
-    var has=FD_IDS.some(function(id){return $("#"+id).value.trim()})||S.lines.length;
+    var has=FD_IDS.some(function(id){return $("#"+id).value.trim()})||S.lines.length||otherRows().length;
     if(!has){localStorage.removeItem(FD_KEY);$("#clearForm").hidden=true;return}
-    var o={kind:S.kind,f:{},member:S.member,checks:S.checks,confirms:S.confirms,cshots:S.cshots||{},lines:S.lines,car:S.car,ctx:S.ctx,page:S.page,reveal:S.reveal,reg:S.reg};
+    var o={kind:S.kind,f:{},member:S.member,checks:S.checks,confirms:S.confirms,cshots:S.cshots||{},lines:S.lines,others:S.others||[],car:S.car,ctx:S.ctx,page:S.page,reveal:S.reveal,reg:S.reg};
     FD_IDS.forEach(function(id){o.f[id]=$("#"+id).value});
     localStorage.setItem(FD_KEY,JSON.stringify(o));$("#clearForm").hidden=false;
   }catch(e){}
@@ -2346,7 +2375,7 @@ function fdRestore(){
     S.checks=o.checks||[];S.confirms=o.confirms||[];S.cshots=o.cshots||{};
     $$("#checks input").forEach(function(i){i.checked=S.checks.indexOf(i.value)>=0});
     $$("#confirms input").forEach(function(i){i.checked=S.confirms.indexOf(i.value)>=0});
-    S.lines=o.lines||[];S.car=o.car||null;S.ctx=o.ctx||null;S.reg=o.reg||null;
+    S.lines=o.lines||[];S.others=o.others||[];renderOthers();S.car=o.car||null;S.ctx=o.ctx||null;S.reg=o.reg||null;
     S.reveal=!!o.reveal;S.page=o.page===2&&S.ctx?2:1;S.nav=[];
     S.restored=true;
   }catch(e){}
