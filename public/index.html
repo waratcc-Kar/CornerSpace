@@ -911,6 +911,7 @@ function renderCands(){
     '<button type="button" class="card" data-i="none"><span class="ct"><b>ไม่ใช่คันนี้</b><small>ลูกค้าใหม่ หรือพิมพ์เบอร์โทรเพื่อค้นหา</small></span></button></div>';
 }
 function lookup(){
+  S.actWarr=[];
   var box=$("#custInfo"),pl=norm($("#plate").value);
   var hist=pl?S.jobs.filter(function(j){return norm(j.plate)===pl}).sort(function(a,b){return b.createdAt-a.createdAt}):[];
   var mc=matchedCust();
@@ -947,6 +948,7 @@ function lookup(){
   });
   if(S.reg&&S.reg.e){var se=new Date(S.reg.e+"T23:59:59").getTime();if(se>now)act.push({n:"ป้ายรับประกัน "+S.reg.g,exp:se})}
   act=act.filter(function(a){var k=a.n+a.exp;if(seen[k])return false;seen[k]=1;return true});
+  S.actWarr=act.filter(function(a){return a.n.indexOf("ป้ายรับประกัน ")!==0});
   var msg=last?"ลูกค้าเดิม "+(last.name||"")+" · มาแล้ว "+hist.length+" ครั้ง · ล่าสุด "+dfmt(last.createdAt):(mc.length?"ลูกค้าเดิมจากฐานข้อมูลร้าน "+mc[0].n:"ลูกค้าใหม่ ยังไม่มีประวัติทะเบียนนี้ในระบบ");
   if(act.length)msg+=" · ยังอยู่ในประกัน: "+act.map(function(a){return a.n+" ถึง "+dfmt(a.exp)}).join(", ");
   box.textContent=msg;
@@ -1245,9 +1247,10 @@ function onPhoto(files){
       return sampleFn.json(PROMPT,{images:S.photos.slice(),signal:S.ctl.signal,cache:false});
     });
   }).then(applyPhoto).then(function(){
-    if(S.kind==="car"&&!S.reg&&S.photos.length){var prev=$("#photoStatus").textContent;setStatus("กำลังหาป้ายประกันในรูป...");return stickerPass().then(function(){
+    /* รถที่มีประกันในระบบอยู่แล้ว ใช้ข้อมูลเดิม ไม่ต้องหาแท็กในรูปซ้ำ */
+    if(S.kind==="car"&&!S.reg&&S.photos.length&&!(S.actWarr&&S.actWarr.length)){var prev=$("#photoStatus").textContent;setStatus("กำลังหาป้ายประกันในรูป...");return stickerPass().then(function(){
       if(S.reg){S.memberManual=false;lookup();setStatus("อ่านป้ายประกันได้: "+S.reg.g+(S.reg.e?" หมด "+dstr(new Date(S.reg.e+"T12:00:00").getTime()):"")+" ตรวจให้ตรงกับป้ายก่อนไปต่อ")}
-      else setStatus((prev||"")+" · ป้ายประกัน: ไม่พบ (ผลอ่าน "+(S.stkRaw||"-")+")")
+      else setStatus((prev||"")+" · ไม่พบแท็กประกันในรูป (ถ้ามีแท็ก กดถ่ายป้ายรับประกัน)")
     })}
   }).catch(photoErr).then(function(){S.photoBusy=false;S.ctl=null;S.reveal=true;S.fail=!S.okRead;renderPhoto();refresh();autoReg();
     /* ลูกค้าเดิม (มีชื่อ+เบอร์จากประวัติ) และรู้ไซส์รถแล้ว: ไปหน้าเลือกโปรแกรมเลย */
@@ -1315,7 +1318,7 @@ function applyPhoto(r){
   if(plate)parts.push("ทะเบียน "+plate);
   if(color)parts.push("สี"+color);
   if(S.reg)parts.push("ป้ายรับประกัน "+S.reg.g+(S.reg.e?" หมด "+dstr(new Date(S.reg.e+"T12:00:00").getTime()):" (อ่านวันหมดอายุไม่ได้)"));
-  else if(S.kind==="car")parts.push("ไม่พบป้ายประกันในรูป (ถ้ามีป้าย ถ่ายให้เห็นทั้งป้ายชัดๆ หรือกรอกวันหมดอายุในหน้าถัดไป)");
+  else if(S.kind==="car"&&S.actWarr&&S.actWarr.length)parts.push("ใช้ประกันเดิมในระบบ: "+S.actWarr.map(function(a){return a.n+" ถึง "+dfmt(a.exp)}).join(", "));
   if(!parts.length){setStatus("อ่านข้อมูลจากรูปนี้ไม่ได้ ลองถ่ายให้เห็นตัวรถและป้ายชัดขึ้น หรือกรอกเองด้านล่าง",true);refresh();return}
   setStatus("อ่านได้: "+parts.join(" · ")+(CONF[r.confidence]?" (ความมั่นใจ"+CONF[r.confidence]+")":"")+" ตรวจให้ตรงกับรถจริงก่อนไปต่อ",r.confidence==="low"||ctxMissing());
   refresh();
@@ -1411,7 +1414,7 @@ function renderNav(){
         '<button type="button" class="btn ghost sm" id="mxGo">ใช้ข้อมูลนี้</button></div></div>'
         :'<p style="margin:0 0 10px"><button type="button" class="btn ghost sm" id="mxOpen">รถคันนี้มีป้ายประกัน? ใส่วันหมดอายุ</button></p>';
     }
-    if(S.kind==="car"&&!ws.active&&S.stkRaw&&!S.reg)hintHtml+='<p class="hint" style="margin:0 0 8px">ป้ายประกัน: ระบบอ่านไม่ได้ (ผลอ่าน '+esc(S.stkRaw)+")</p>";
+
     box.innerHTML=hintHtml+'<div class="tiles">'+TILES.filter(function(t){return (t.kind==="both"||t.kind===S.kind)&&(!t.warr||ws.due||linesOf(t.groups).length>0)}).map(tileHtml).join("")+"</div>";
     return;
   }
