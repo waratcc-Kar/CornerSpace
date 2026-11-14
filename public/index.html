@@ -809,6 +809,7 @@ function goPage(n){
   if(n===2){
     if(!S.ctx){toast(S.kind==="moto"?"ใส่ขนาดเครื่องยนต์ (cc) ก่อน":"เลือกรุ่นรถก่อน");return}
     if(ctxMissing()){toast("รุ่นนี้ไม่มีในตาราง เลือกประเภทล้างรถและไซส์ฟิล์มให้ครบก่อน");renderPage();return}
+    autoReg();
     var phd=$("#phone").value.replace(/\D/g,"");
     if(phd.length<9){
       toast(phd.length?"เบอร์โทรไม่ครบ ตรวจอีกครั้ง":"ใส่เบอร์โทรลูกค้าก่อน (ชื่อไม่บังคับ)");S.ncShow=!$("#manualWrap").hidden?S.ncShow:true;renderPage();
@@ -1248,7 +1249,7 @@ function onPhoto(files){
       if(S.reg){S.memberManual=false;lookup();setStatus("อ่านป้ายประกันได้: "+S.reg.g+(S.reg.e?" หมด "+dstr(new Date(S.reg.e+"T12:00:00").getTime()):"")+" ตรวจให้ตรงกับป้ายก่อนไปต่อ")}
       else setStatus((prev||"")+" · ป้ายประกัน: ไม่พบ (ผลอ่าน "+(S.stkRaw||"-")+")")
     })}
-  }).catch(photoErr).then(function(){S.photoBusy=false;S.ctl=null;S.reveal=true;S.fail=!S.okRead;renderPhoto();refresh();
+  }).catch(photoErr).then(function(){S.photoBusy=false;S.ctl=null;S.reveal=true;S.fail=!S.okRead;renderPhoto();refresh();autoReg();
     /* ลูกค้าเดิม (มีชื่อ+เบอร์จากประวัติ) และรู้ไซส์รถแล้ว: ไปหน้าเลือกโปรแกรมเลย */
     if(S.page===1&&S.okRead&&!S.fail&&!S.editJobId&&S.ctx&&!ctxMissing()&&S.lastConf!=="low"&&isReturning()&&$("#phone").value.replace(/\D/g,"").length>=9){goPage(2);toast("ลูกค้าเดิม ไปหน้าเลือกโปรแกรมแล้ว")}
   });
@@ -1568,6 +1569,9 @@ function saveJob(){
   var t=totals();
   if(t.missing){toast("ยังมี "+t.missing+" รายการที่ไม่ได้ใส่ราคา");return}
   var moto=S.kind==="moto";
+  autoReg();
+  /* ลูกค้าประกันที่บันทึกจากแท็กก่อนกรอกชื่อ: เติมชื่อ/เบอร์ให้ */
+  try{var mc0=matchedCust()[0],nm0=$("#cname").value.trim(),ph0=$("#phone").value.trim();if(mc0&&((!mc0.n&&nm0)||(!mc0.p&&ph0)))store.saveCustomer(Object.assign({},mc0,{n:mc0.n||nm0,p:mc0.p||ph0})).catch(function(){})}catch(x){}
   if(S.editJobId){
     var cur=S.jobs.filter(function(x){return x.id===S.editJobId})[0];
     if(!cur||cur.status==="delivered"){toast("ชำระเงินแล้ว แก้ไขรายการไม่ได้");return}
@@ -2105,24 +2109,34 @@ function renderReg(){
   var it={start:R.d?new Date(R.d+"T12:00:00").getTime():null,end:R.e?new Date(R.e+"T12:00:00").getTime():null};
   var sc=schedOf(it),now=mIdx(Date.now());
   var f=function(k,l,t){return '<label class="f"><span>'+l+'</span><input class="in" data-r="'+k+'" type="'+t+'" value="'+esc(R[k]||"")+'"'+(t==="number"?' step="0.5" min="0"':"")+"></label>"};
-  box.innerHTML='<div class="job" style="margin-top:16px"><b>พบป้ายรับประกันของร้าน</b><p class="hint">ตรวจให้ตรงกับป้าย แล้วกดบันทึก ระบบจะลงทะเบียนรถคันนี้เป็นลูกค้าประกัน</p><div class="fields">'+
+  var waitPh=R.e&&!(matchedCust().length||isReturning())&&$("#phone").value.replace(/\D/g,"").length<9;
+  box.innerHTML='<div class="job" style="margin-top:16px"><b>อ่านจากแท็กประกันแล้ว</b><p class="hint">'+(R.e?(waitPh?"ระบบจะบันทึกประกันให้เองเมื่อใส่เบอร์โทรลูกค้า แก้ช่องด้านล่างได้ถ้าอ่านผิด":"กำลังบันทึกประกันให้อัตโนมัติ"):"อ่านวันหมดประกันจากแท็กไม่ได้ กรอกวันหมดประกันแล้วกดบันทึก")+'</p><div class="fields">'+
     f("g","โปรแกรม","text")+'<label class="f"><span>ประเภท</span><select class="in" data-r="k">'+["coating","ppf","tint"].map(function(k){return '<option value="'+k+'"'+(R.k===k?" selected":"")+">"+KIND_L[k]+"</option>"}).join("")+"</select></label>"+
     f("y","อายุประกัน (ปี)","number")+f("d","วันที่ทำ (คำนวณจากป้าย)","date")+f("e","หมดประกัน","date")+"</div>"+
     (R.e?'<p style="margin:10px 0 0"><b>รอบบริการทุก 6 เดือน:</b> '+(sc.months.length?esc(sc.months.map(mLabel).join(" · ")):"ไม่มีรอบเหลือ")+"</p><p class=\"hint\" style=\"margin:2px 0 0\">"+(sc.thisDue?"เดือนนี้ถึงรอบบริการ · เหลืออีก "+sc.after.length+" ครั้งหลังรอบนี้":"เหลืออีก "+sc.total+" ครั้ง")+"</p>":'<p class="hint">อ่านวันหมดประกันไม่ได้ กรอกวันหมดประกันเอง</p>')+
-    '<div class="acts"><button type="button" class="btn primary" id="regSave">บันทึกเป็นลูกค้าประกัน</button><button type="button" class="btn ghost" id="regSkip">ไม่บันทึก</button></div></div>';
+    '<div class="acts">'+(R.e?"":'<button type="button" class="btn primary" id="regSave">บันทึกประกัน</button>')+'<button type="button" class="btn ghost" id="regSkip">ไม่ใช่แท็กของรถคันนี้</button></div></div>';
 }
-function saveReg(){
+/* อ่านแท็กประกันได้แล้ว บันทึกให้อัตโนมัติ ไม่ต้องกดยืนยัน (รอจนมีทะเบียน + เบอร์โทร หรือเป็นรถที่มีในระบบแล้ว) */
+function autoReg(){
+  var R=S.reg;if(!R||!R.e||S.regSaving||S.regHide||S.editJobId)return;
+  if(!$("#plate").value.trim())return;
+  var known=matchedCust().length>0||isReturning();
+  if(!known&&$("#phone").value.replace(/\D/g,"").length<9)return;
+  saveReg(true);
+}
+function saveReg(auto){
   var R=S.reg,plate=$("#plate").value.trim();
-  if(!R)return;
-  if(!plate){toast("กรอกทะเบียนรถก่อนบันทึก");return}
-  if(!R.e){toast("ใส่วันหมดประกันก่อนบันทึก");return}
+  if(!R||S.regSaving)return;
+  if(!plate){if(!auto)toast("กรอกทะเบียนรถก่อนบันทึก");return}
+  if(!R.e){if(!auto)toast("ใส่วันหมดประกันก่อนบันทึก");return}
+  S.regSaving=true;
   var mc=matchedCust()[0];
   var c=mc?Object.assign({},mc):{n:"",p:"",c:"",plate:"",g:"",e:"",k:"",d:"",sv:[]};
   c.plate=c.plate||plate;c.n=c.n||$("#cname").value.trim();c.p=c.p||$("#phone").value.trim();
   if(S.car)c.c=S.car.label;
   c.g=R.g;c.e=R.e;c.d=R.d||"";c.k=R.k;
-  store.saveCustomer(c).then(function(){toast("ลงทะเบียนประกันของรถ "+plate+" แล้ว");S.reg=null;S.listId="";lookup();refresh()})
-    .catch(function(e){toast(e&&e.code==="invalid_argument"?"บัญชีนี้บันทึกข้อมูลไม่ได้":"บันทึกไม่สำเร็จ ลองอีกครั้ง")});
+  store.saveCustomer(c).then(function(){S.regSaving=false;toast("บันทึกประกันจากแท็กแล้ว: "+(R.g||"")+" หมด "+dfmt(new Date(R.e+"T12:00:00").getTime()));S.reg=null;S.listId="";lookup();refresh()})
+    .catch(function(e){S.regSaving=false;toast(e&&e.code==="invalid_argument"?"บัญชีนี้บันทึกข้อมูลไม่ได้":"บันทึกประกันจากแท็กไม่สำเร็จ ลองอีกครั้ง")});
 }
 function markDone(cid,mi){
   var m=S.customers.filter(function(c){return c.id===cid})[0];if(!m)return;
@@ -2161,15 +2175,15 @@ function wire(){
   $("#cands").addEventListener("click",function(e){var b=e.target.closest("[data-i]");if(!b)return;
     if(b.dataset.i==="none"){S.listId="none";refresh();return}
     if(b.dataset.plate)$("#plate").value=b.dataset.plate;
-    S.listId=b.dataset.i||"";S.memberManual=false;lookup();refresh();
+    S.listId=b.dataset.i||"";S.memberManual=false;lookup();refresh();autoReg();
     /* คันเดิม: ข้ามไปเลือกโปรแกรมเลย */
     if(S.page===1&&!S.editJobId&&S.ctx&&!ctxMissing()&&$("#phone").value.replace(/\D/g,"").length>=9){goPage(2);toast("ลูกค้าเดิม ไปหน้าเลือกโปรแกรมแล้ว")}
   });
-  $("#phone").addEventListener("input",function(){S.memberManual=false;lookup()});
+  $("#phone").addEventListener("input",function(){S.memberManual=false;lookup();autoReg()});
   $("#newCust").addEventListener("input",function(e){
     if(e.target.id==="ncName")$("#cname").value=e.target.value;
     if(e.target.id==="ncPhone")$("#phone").value=e.target.value;
-    var ok=$("#phone").value.replace(/\D/g,"").length>=9;
+    var ok=$("#phone").value.replace(/\D/g,"").length>=9;if(ok)autoReg();
     $("#ncHint").textContent=ok?"บันทึกข้อมูลลูกค้าแล้ว ตรวจสอบให้ตรงก่อนไปเลือกโปรแกรม":"ไม่พบข้อมูลลูกค้าคันนี้ในระบบ กรอกเบอร์โทรก่อนเลือกโปรแกรม (ชื่อไม่บังคับ)";
     renderBar();
   });
