@@ -303,10 +303,10 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
       <div class="ctxbar" id="readCard" hidden style="margin-top:16px"></div>
       <div class="newcust" id="newCust" hidden>
         <h2 style="margin:0">บันทึกข้อมูลลูกค้า</h2>
-        <p class="hint" style="margin:0" id="ncHint">ไม่พบข้อมูลลูกค้าคันนี้ในระบบ กรอกชื่อและเบอร์โทรก่อนเลือกโปรแกรม</p>
+        <p class="hint" style="margin:0" id="ncHint">ไม่พบข้อมูลลูกค้าคันนี้ในระบบ กรอกเบอร์โทรก่อนเลือกโปรแกรม (ชื่อไม่บังคับ)</p>
         <div class="fields">
-          <label class="f"><span>ชื่อลูกค้า</span><input class="in" id="ncName" autocomplete="off"></label>
-          <label class="f"><span>เบอร์โทร</span><input class="in" id="ncPhone" type="tel" inputmode="tel" autocomplete="off"></label>
+          <label class="f"><span>ชื่อลูกค้า (ไม่บังคับ)</span><input class="in" id="ncName" autocomplete="off"></label>
+          <label class="f"><span>เบอร์โทร *</span><input class="in" id="ncPhone" type="tel" inputmode="tel" autocomplete="off"></label>
         </div>
       </div>
       <div id="regCard"></div>
@@ -336,8 +336,8 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
       <div id="custInfo" class="hint"></div>
       <h2>ลูกค้า</h2>
       <div class="fields">
-        <label class="f"><span>ชื่อลูกค้า</span><input class="in" id="cname" autocomplete="off"></label>
-        <label class="f"><span>เบอร์โทร</span><input class="in" id="phone" type="tel" inputmode="tel" autocomplete="off"></label>
+        <label class="f"><span>ชื่อลูกค้า (ไม่บังคับ)</span><input class="in" id="cname" autocomplete="off"></label>
+        <label class="f"><span>เบอร์โทร *</span><input class="in" id="phone" type="tel" inputmode="tel" autocomplete="off"></label>
         <label class="switch"><input type="checkbox" id="member"> ลูกค้าสมาชิก (ระบบติ๊กให้เมื่อยังอยู่ในประกัน)</label>
       </div>
 
@@ -809,9 +809,10 @@ function goPage(n){
   if(n===2){
     if(!S.ctx){toast(S.kind==="moto"?"ใส่ขนาดเครื่องยนต์ (cc) ก่อน":"เลือกรุ่นรถก่อน");return}
     if(ctxMissing()){toast("รุ่นนี้ไม่มีในตาราง เลือกประเภทล้างรถและไซส์ฟิล์มให้ครบก่อน");renderPage();return}
-    if(!$("#cname").value.trim()||!$("#phone").value.trim()){
-      toast("บันทึกชื่อและเบอร์โทรลูกค้าก่อน");S.ncShow=!$("#manualWrap").hidden?S.ncShow:true;renderPage();
-      var f=!$("#newCust").hidden?($("#ncName").value.trim()?$("#ncPhone"):$("#ncName")):($("#cname").value.trim()?$("#phone"):$("#cname"));f.focus();return}
+    var phd=$("#phone").value.replace(/\D/g,"");
+    if(phd.length<9){
+      toast(phd.length?"เบอร์โทรไม่ครบ ตรวจอีกครั้ง":"ใส่เบอร์โทรลูกค้าก่อน (ชื่อไม่บังคับ)");S.ncShow=!$("#manualWrap").hidden?S.ncShow:true;renderPage();
+      var f=!$("#newCust").hidden?$("#ncPhone"):$("#phone");f.focus();return}
   }
   if(n===2&&S.editJobId)repriceEdit();
   S.page=n;S.nav=[];
@@ -843,14 +844,14 @@ function renderPage(){
     rc.innerHTML='<div style="min-width:0"><div>'+(pv?'<span class="plate">'+esc(pv)+"</span> ":'<input class="in" id="plateQuick" aria-label="ทะเบียนรถ" placeholder="อ่านทะเบียนไม่ได้ พิมพ์ทะเบียนตรงนี้" style="max-width:260px;margin-bottom:6px"><br>')+esc(S.car.label)+(S.member?' <span class="tag member">สมาชิก</span>':"")+'</div>'+cuBox+'<div class="hint">'+esc($("#color").value.trim()?"สี"+$("#color").value.trim():"")+'</div><div class="hint">'+esc($("#custInfo").textContent)+'</div><div class="tags" style="margin:6px 0 0">'+tags+'</div></div><button type="button" class="btn ghost sm" id="editInfo">แก้ไขข้อมูล</button>';
   }
   var nm=$("#cname").value.trim(),ph=$("#phone").value.trim();
-  if(card&&(!nm||!ph))S.ncShow=true;
+  if(card&&!ph)S.ncShow=true;
   if(!card)S.ncShow=false;
   var nc=$("#newCust");nc.hidden=!S.ncShow;
   if(S.ncShow){
     var a=document.activeElement;
     if(a!==$("#ncName"))$("#ncName").value=$("#cname").value;
     if(a!==$("#ncPhone"))$("#ncPhone").value=$("#phone").value;
-    $("#ncHint").textContent=(nm&&ph)?"บันทึกข้อมูลลูกค้าแล้ว ตรวจสอบให้ตรงก่อนไปเลือกโปรแกรม":"ไม่พบข้อมูลลูกค้าคันนี้ในระบบ กรอกชื่อและเบอร์โทรก่อนเลือกโปรแกรม";
+    $("#ncHint").textContent=(ph.replace(/\D/g,"").length>=9)?"บันทึกข้อมูลลูกค้าแล้ว ตรวจสอบให้ตรงก่อนไปเลือกโปรแกรม":"ไม่พบข้อมูลลูกค้าคันนี้ในระบบ กรอกเบอร์โทรก่อนเลือกโปรแกรม (ชื่อไม่บังคับ)";
   }
   $("#p1").hidden=S.page!==1;$("#p2").hidden=S.page!==2;
   $("#bar1").hidden=S.page!==1;$("#bar2").hidden=S.page!==2;
@@ -1241,7 +1242,7 @@ function onPhoto(files){
     })}
   }).catch(photoErr).then(function(){S.photoBusy=false;S.ctl=null;S.reveal=true;S.fail=!S.okRead;renderPhoto();refresh();
     /* ลูกค้าเดิม (มีชื่อ+เบอร์จากประวัติ) และรู้ไซส์รถแล้ว: ไปหน้าเลือกโปรแกรมเลย */
-    if(S.page===1&&S.okRead&&!S.fail&&!S.editJobId&&S.ctx&&!ctxMissing()&&S.lastConf!=="low"&&isReturning()&&$("#cname").value.trim()&&$("#phone").value.trim()){goPage(2);toast("ลูกค้าเดิม ไปหน้าเลือกโปรแกรมแล้ว")}
+    if(S.page===1&&S.okRead&&!S.fail&&!S.editJobId&&S.ctx&&!ctxMissing()&&S.lastConf!=="low"&&isReturning()&&$("#phone").value.replace(/\D/g,"").length>=9){goPage(2);toast("ลูกค้าเดิม ไปหน้าเลือกโปรแกรมแล้ว")}
   });
 }
 var CONF={high:"สูง",medium:"ปานกลาง",low:"ต่ำ"};
@@ -2154,8 +2155,8 @@ function wire(){
   $("#newCust").addEventListener("input",function(e){
     if(e.target.id==="ncName")$("#cname").value=e.target.value;
     if(e.target.id==="ncPhone")$("#phone").value=e.target.value;
-    var ok=$("#cname").value.trim()&&$("#phone").value.trim();
-    $("#ncHint").textContent=ok?"บันทึกข้อมูลลูกค้าแล้ว ตรวจสอบให้ตรงก่อนไปเลือกโปรแกรม":"ไม่พบข้อมูลลูกค้าคันนี้ในระบบ กรอกชื่อและเบอร์โทรก่อนเลือกโปรแกรม";
+    var ok=$("#phone").value.replace(/\D/g,"").length>=9;
+    $("#ncHint").textContent=ok?"บันทึกข้อมูลลูกค้าแล้ว ตรวจสอบให้ตรงก่อนไปเลือกโปรแกรม":"ไม่พบข้อมูลลูกค้าคันนี้ในระบบ กรอกเบอร์โทรก่อนเลือกโปรแกรม (ชื่อไม่บังคับ)";
     renderBar();
   });
   $("#readCard").addEventListener("input",function(e){if(e.target.id==="plateQuick"){$("#plate").value=e.target.value;S.memberManual=false;renderBar();lookup()}});
