@@ -886,20 +886,28 @@ function matchedCust(){
     return (S.listId&&S.listId===m.id)||(ph.length>=9&&digits(m.p)===ph)||(pl&&m.plate&&norm(m.plate)===pl);
   });
 }
+/* ทะเบียนที่อ่านได้อาจเพี้ยนบางตัวอักษร: เสนอเฉพาะรถที่ "เลขทะเบียน" ตรงกันและรุ่นเดียวกัน (ไม่เดาจากรุ่นอย่างเดียว) */
+function plateNum(p){var m=String(p||"").match(/(\d{1,4})\D*$/);return m?m[1]:""}
 function renderCands(){
-  var box=$("#cands"),pl=norm($("#plate").value);
+  var box=$("#cands"),pl=norm($("#plate").value),num=plateNum($("#plate").value);
   var hist=pl?S.jobs.some(function(j){return norm(j.plate)===pl}):false;
-  if(!S.car||S.kind!=="car"||hist||S.listId==="none"||matchedCust().length){box.innerHTML="";return}
-  var lab=norm(S.car.label),now=Date.now(),c=[];
+  if(!S.car||S.kind!=="car"||hist||S.listId==="none"||matchedCust().length||!num){box.innerHTML="";return}
+  var lab=norm(S.car.label),c=[],seen={};
+  var sameCar=function(x){var k=norm(x);return k.length>=3&&(lab.indexOf(k)>=0||k.indexOf(lab)>=0)};
   S.customers.forEach(function(m){
-    var k=norm(m.c);if(k.length<3||!(expOf(m)>now))return;
-    if(k==="cross"){if(lab.indexOf("corollacross")>=0)c.push(m);return}
-    if(lab.indexOf(k)>=0||k.indexOf(lab)>=0)c.push(m);
+    if(!m.plate||plateNum(m.plate)!==num||!sameCar(m.c))return;
+    var key=norm(m.plate);if(seen[key])return;seen[key]=1;
+    c.push({id:m.id,n:m.n,p:m.p,plate:m.plate,info:m.g?(m.g+(expOf(m)?" · ประกันถึง "+dfmt(expOf(m)):"")):""});
+  });
+  S.jobs.slice().sort(function(a,b){return b.createdAt-a.createdAt}).forEach(function(j){
+    if(!j.plate||plateNum(j.plate)!==num||!sameCar(j.car))return;
+    var key=norm(j.plate);if(seen[key])return;seen[key]=1;
+    c.push({id:"",n:j.name,p:j.phone,plate:j.plate,info:"มาล่าสุด "+dstr(j.createdAt)});
   });
   if(!c.length){box.innerHTML="";return}
-  box.innerHTML='<p class="sublabel">อาจเป็นลูกค้าเดิมของร้าน (รถรุ่นเดียวกัน) แตะเพื่อเลือก</p><div class="cards">'+c.slice(0,6).map(function(m){
-    return '<button type="button" class="card" data-i="'+esc(m.id)+'"><span class="ct"><b>'+esc(m.n)+"</b><small>"+esc(m.p+" · "+(m.g||"")+" · ประกันถึง "+dfmt(expOf(m)))+"</small></span></button>"}).join("")+
-    '<button type="button" class="card" data-i="none"><span class="ct"><b>ไม่ใช่ลูกค้าเดิม</b><small>ลูกค้าใหม่ หรือพิมพ์เบอร์โทรเพื่อค้นหา</small></span></button></div>'+(c.length>6?'<p class="hint">มีอีก '+(c.length-6)+' ราย พิมพ์เบอร์โทรเพื่อระบุ</p>':"");
+  box.innerHTML='<p class="sublabel">ทะเบียนใกล้เคียง เลขตรงกันและรุ่นเดียวกัน ใช่คันนี้ไหม แตะเพื่อเลือก</p><div class="cards">'+c.slice(0,4).map(function(m){
+    return '<button type="button" class="card" data-i="'+esc(m.id)+'" data-plate="'+esc(m.plate)+'"><span class="ct"><b>'+esc(m.plate)+" · "+esc(m.n||"ไม่มีชื่อ")+"</b><small>"+esc([m.p,m.info].filter(Boolean).join(" · "))+"</small></span></button>"}).join("")+
+    '<button type="button" class="card" data-i="none"><span class="ct"><b>ไม่ใช่คันนี้</b><small>ลูกค้าใหม่ หรือพิมพ์เบอร์โทรเพื่อค้นหา</small></span></button></div>';
 }
 function lookup(){
   var box=$("#custInfo"),pl=norm($("#plate").value);
@@ -2150,7 +2158,13 @@ function wire(){
     refresh();
   });
   $("#plate").addEventListener("input",function(){S.memberManual=false;renderBar();lookup()});
-  $("#cands").addEventListener("click",function(e){var b=e.target.closest("[data-i]");if(!b)return;S.listId=b.dataset.i;S.memberManual=false;lookup();refresh()});
+  $("#cands").addEventListener("click",function(e){var b=e.target.closest("[data-i]");if(!b)return;
+    if(b.dataset.i==="none"){S.listId="none";refresh();return}
+    if(b.dataset.plate)$("#plate").value=b.dataset.plate;
+    S.listId=b.dataset.i||"";S.memberManual=false;lookup();refresh();
+    /* คันเดิม: ข้ามไปเลือกโปรแกรมเลย */
+    if(S.page===1&&!S.editJobId&&S.ctx&&!ctxMissing()&&$("#phone").value.replace(/\D/g,"").length>=9){goPage(2);toast("ลูกค้าเดิม ไปหน้าเลือกโปรแกรมแล้ว")}
+  });
   $("#phone").addEventListener("input",function(){S.memberManual=false;lookup()});
   $("#newCust").addEventListener("input",function(e){
     if(e.target.id==="ncName")$("#cname").value=e.target.value;
