@@ -1731,13 +1731,15 @@ function renderQueue(){
       (j.editedBy?'<p class="hint">แก้ไขล่าสุดโดย '+esc(j.editedBy)+" · "+dstr(j.editedAt)+" "+new Date(j.editedAt).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+(j.edits&&j.edits.length>1?" ("+j.edits.length+" ครั้ง)":"")+(j.edits&&j.edits.length&&j.edits[j.edits.length-1].chg?" · เปลี่ยน "+esc(j.edits[j.edits.length-1].chg):"")+"</p>":"")+
       (S.editJob===j.id?editHtml(j):"")+
       ((j.status==="done"||j.status==="delivered")?durHtml(j):"")+
-      (S.payOpen===j.id&&j.status!=="delivered"?payPanel(j):(j.pay&&j.pay.paidAt?payDone(j):""))+
+      (S.payOpen===j.id&&j.status!=="delivered"?payPanel(j):(j.pay&&j.pay.paidAt?payDone(j):""))+voidLog(j)+
+      (S.voidOpen===j.id&&j.pay&&j.pay.paidAt?voidPanel(j):"")+
       '<div class="acts">'+
       (S.payOpen===j.id&&j.status!=="delivered"?
         (j.status==="done"?'<button class="btn primary sm" data-act="next">ยืนยันชำระเงินและส่งมอบ</button>':'<button class="btn primary sm" data-act="prepay">ยืนยันรับชำระ</button>')+'<button class="btn ghost sm" data-act="payclose">ปิด</button>'
       :j.status==="done"?(prepaidOk(j)?'<button class="btn primary sm" data-act="handover">ส่งมอบรถ</button>':'<button class="btn primary sm" data-act="payopen">ชำระเงิน</button>')
       :(st[2]?'<button class="btn primary sm" data-act="next">'+st[2]+"</button>":"")+(j.status!=="delivered"&&!(j.pay&&j.pay.paidAt)?'<button class="btn ghost sm" data-act="payopen">รับชำระก่อน</button>':""))+
       (j.status!=="delivered"&&S.editJob!==j.id?'<button class="btn ghost sm" data-act="edit">แก้ไข</button>':"")+
+      (j.pay&&j.pay.paidAt&&S.voidOpen!==j.id&&S.payOpen!==j.id?'<button class="btn ghost sm" data-act="voidopen" style="color:var(--danger,#b42318)">ยกเลิกบิล</button>':"")+
       (digits(j.phone).length>=9?'<a class="btn blue sm" href="tel:'+digits(j.phone)+'" aria-label="โทรหาลูกค้า">โทรหาลูกค้า</a>':"")+'</div>'+
       (S.showText===j.id?'<textarea class="in copybox" readonly>'+esc(lineSummary(j))+"</textarea>":"")+"</article>";
   }).join("");
@@ -1783,6 +1785,19 @@ function durHtml(j){
   if(!j.doneAt||!j.createdAt)return "";
   return '<div class="dur"><b>ใช้เวลา '+fmtDur(j.doneAt-j.createdAt)+'</b><span>รับรถ '+hm(j.createdAt)+" → เสร็จ "+hm(j.doneAt)+"</span></div>";
 }
+/* ยกเลิกบิล (ยกเลิกการรับเงิน): พนักงานทำได้ ต้องใส่ชื่อผู้ยกเลิก เก็บประวัติไว้ในใบงาน */
+function voidPanel(j){
+  var p=j.pay,amt=paidSum(j);
+  return '<div class="pay" style="border-color:var(--danger,#b42318)"><b>ยกเลิกบิล ฿'+amt.toLocaleString("th-TH")+" ("+dstr(p.paidAt)+")</b>"+
+    '<label class="f"><span>ชื่อพนักงานที่ยกเลิก *</span><input class="in" data-void="by" autocomplete="off" value="'+esc((S.voidD&&S.voidD.by)||"")+'"></label>'+
+    '<label class="f"><span>เหตุผล (ไม่บังคับ)</span><input class="in" data-void="why" autocomplete="off" value="'+esc((S.voidD&&S.voidD.why)||"")+'"></label>'+
+    '<p class="hint">ยอดนี้จะถูกหักออกจากสรุปรายรับ'+(j.status==="delivered"?" และใบงานจะกลับไปเป็น \"เสร็จแล้ว\" รอชำระเงินใหม่":"")+'</p>'+
+    '<div class="acts"><button class="btn danger sm" data-act="voidok">ยืนยันยกเลิกบิล</button><button class="btn ghost sm" data-act="voidclose">ปิด</button></div></div>';
+}
+function voidLog(j){
+  if(!j.payVoids||!j.payVoids.length)return "";
+  return j.payVoids.map(function(v){return '<p class="hint" style="color:var(--danger,#b42318)">ยกเลิกบิล ฿'+(Number(v.amt)||0).toLocaleString("th-TH")+" โดย "+esc(v.by)+(v.acct?" ("+esc(v.acct)+")":"")+" · "+dstr(v.at)+" "+new Date(v.at).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+(v.why?" · "+esc(v.why):"")+"</p>"}).join("");
+}
 function jobBal(j){return Math.max(0,(j.total||0)-(j.deposit||0))}
 function paidSum(j){var p=j.pay;return p?(Number(p.cash)||0)+(Number(p.scan)||0):0}
 /* จ่ายก่อนแล้วและยอดยังตรงกับยอดที่ต้องชำระ */
@@ -1824,7 +1839,18 @@ function jobAct(id,act){
   if(act==="edit"){startEdit(j);return}
   if(act==="ecancel"){S.editJob=null;S.editD=null;renderQueue();return}
   if(act==="addphoto"){S.photoJob=id;var pin=$("#jobPhotoIn");pin.value="";pin.click();return}
-  if(act==="payopen"){S.payOpen=id;renderQueue();return}
+  if(act==="payopen"){S.payOpen=id;S.voidOpen=null;renderQueue();return}
+  if(act==="voidopen"){S.voidOpen=id;S.payOpen=null;S.voidD={by:"",why:""};renderQueue();var vi=document.querySelector('[data-void="by"]');if(vi)vi.focus();return}
+  if(act==="voidclose"){S.voidOpen=null;renderQueue();return}
+  if(act==="voidok"){
+    var vd=S.voidD||{},by=String(vd.by||"").trim();
+    if(!by){toast("ใส่ชื่อพนักงานที่ยกเลิกบิลก่อน");var vi2=document.querySelector('[data-void="by"]');if(vi2)vi2.focus();return}
+    if(!(j.pay&&j.pay.paidAt))return;
+    var rec={amt:paidSum(j),cash:Number(j.pay.cash)||0,scan:Number(j.pay.scan)||0,paidAt:j.pay.paidAt,at:Date.now(),by:by,acct:S.uid||"",why:String(vd.why||"").trim().slice(0,200)};
+    var vp={pay:null,payVoids:(j.payVoids||[]).concat([rec]).slice(-20)};if(j.status==="delivered")vp.status="done";
+    S.voidOpen=null;S.voidD=null;if(S.payD)delete S.payD[id];
+    updJob(id,vp).then(function(){toast("ยกเลิกบิลแล้ว")},function(){toast("ยกเลิกบิลไม่สำเร็จ ลองอีกครั้ง")});return;
+  }
   if(act==="payclose"){S.payOpen=null;renderQueue();return}
   if(act==="esave"){
     var d=S.editD;if(!d)return;
@@ -2363,6 +2389,7 @@ function wire(){
   });
   $("#jobs").addEventListener("input",function(e){
     var D=e.target.dataset||{};
+    if(D.void){(S.voidD||(S.voidD={}))[D.void]=e.target.value;return}
     if(D.ek&&S.editD){S.editD[D.ek]=e.target.value;return}
     if(D.el!==undefined&&S.editD){S.editD.lines[+D.el][D.ef]=e.target.value;return}
     var k=D.pa;if(!k)return;
