@@ -216,7 +216,7 @@ async function api(req, env, url) {
     if (!u.owner) return fail(403, "owner_only", "ยกเลิกใบงานได้เฉพาะเจ้าของร้าน");
     const cur = await getDoc(env, "jobs", parts[1]);
     if (!cur) return fail(404, "not_found", "ไม่พบใบงาน");
-    if (cur.status === "delivered") return fail(409, "delivered", "ใบงานนี้ชำระเงินแล้ว ยกเลิกไม่ได้");
+    if (cur.status === "delivered" || (cur.pay && cur.pay.paidAt)) return fail(409, "paid", "ใบงานนี้รับเงินแล้ว ยกเลิกไม่ได้");
     let body = {};
     try { body = (await readJson(req)) || {}; } catch (e) { body = {}; }
     const arch = Object.assign({}, cur, { cancelledAt: Date.now(), cancelledBy: u.email || "", cancelReason: String(body.reason || "").slice(0, 200) });

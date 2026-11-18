@@ -860,7 +860,7 @@ function renderPage(){
   $$("#kind button").forEach(function(b){b.disabled=!!S.editJobId});
   var eb=$("#editBanner");eb.hidden=!S.editJobId;
   var ejd=S.editJobId&&S.jobs.filter(function(x){return x.id===S.editJobId})[0];$("#editUndoDone").hidden=!(ejd&&ejd.status==="done");
-  var jc=$("#jobCancel");jc.hidden=!(S.owner&&ejd&&ejd.status!=="delivered");if(jc.hidden||S.jcArm!==S.editJobId){jc.textContent="ยกเลิกใบงานนี้";if(S.jcArm!==S.editJobId)S.jcArm=null}
+  var jc=$("#jobCancel");jc.hidden=!(S.owner&&ejd&&ejd.status!=="delivered"&&!(ejd.pay&&ejd.pay.paidAt));if(jc.hidden||S.jcArm!==S.editJobId){jc.textContent="ยกเลิกใบงานนี้";if(S.jcArm!==S.editJobId)S.jcArm=null}
   if(S.editJobId){var ej=S.jobs.filter(function(x){return x.id===S.editJobId})[0];$("#editBannerTx").textContent="แก้ไขใบ "+(ej?ej.no:"")+(S.owner?" · แก้รุ่น/ไซส์รถได้ที่ปุ่ม แก้ไขข้อมูลรถ":" · แก้รุ่น/ไซส์รถได้เฉพาะเจ้าของร้าน")+" · ข้อมูลลูกค้าแก้ไม่ได้ · ลบโปรแกรมเดิมไม่ได้ แต่เปลี่ยนเป็นโปรแกรมอื่น เพิ่ม หรือแก้ราคาได้"}
   $("#saveBtn").textContent=S.editJobId?"บันทึกการแก้ไข":"บันทึกใบรับรถ";
   $("#st1").setAttribute("aria-current",S.page===1?"step":"false");
@@ -1731,9 +1731,12 @@ function renderQueue(){
       (j.editedBy?'<p class="hint">แก้ไขล่าสุดโดย '+esc(j.editedBy)+" · "+dstr(j.editedAt)+" "+new Date(j.editedAt).toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+(j.edits&&j.edits.length>1?" ("+j.edits.length+" ครั้ง)":"")+(j.edits&&j.edits.length&&j.edits[j.edits.length-1].chg?" · เปลี่ยน "+esc(j.edits[j.edits.length-1].chg):"")+"</p>":"")+
       (S.editJob===j.id?editHtml(j):"")+
       ((j.status==="done"||j.status==="delivered")?durHtml(j):"")+
-      (j.status==="done"&&S.payOpen===j.id?payPanel(j):(j.status==="delivered"?payDone(j):""))+
+      (S.payOpen===j.id&&j.status!=="delivered"?payPanel(j):(j.pay&&j.pay.paidAt?payDone(j):""))+
       '<div class="acts">'+
-      (j.status==="done"?(S.payOpen===j.id?'<button class="btn primary sm" data-act="next">ยืนยันชำระเงินและส่งมอบ</button><button class="btn ghost sm" data-act="payclose">ปิด</button>':'<button class="btn primary sm" data-act="payopen">ชำระเงิน</button>'):(st[2]?'<button class="btn primary sm" data-act="next">'+st[2]+"</button>":""))+
+      (S.payOpen===j.id&&j.status!=="delivered"?
+        (j.status==="done"?'<button class="btn primary sm" data-act="next">ยืนยันชำระเงินและส่งมอบ</button>':'<button class="btn primary sm" data-act="prepay">ยืนยันรับชำระ</button>')+'<button class="btn ghost sm" data-act="payclose">ปิด</button>'
+      :j.status==="done"?(prepaidOk(j)?'<button class="btn primary sm" data-act="handover">ส่งมอบรถ</button>':'<button class="btn primary sm" data-act="payopen">ชำระเงิน</button>')
+      :(st[2]?'<button class="btn primary sm" data-act="next">'+st[2]+"</button>":"")+(j.status!=="delivered"&&!(j.pay&&j.pay.paidAt)?'<button class="btn ghost sm" data-act="payopen">รับชำระก่อน</button>':""))+
       (j.status!=="delivered"&&S.editJob!==j.id?'<button class="btn ghost sm" data-act="edit">แก้ไข</button>':"")+
       (digits(j.phone).length>=9?'<a class="btn blue sm" href="tel:'+digits(j.phone)+'" aria-label="โทรหาลูกค้า">โทรหาลูกค้า</a>':"")+'</div>'+
       (S.showText===j.id?'<textarea class="in copybox" readonly>'+esc(lineSummary(j))+"</textarea>":"")+"</article>";
@@ -1781,6 +1784,9 @@ function durHtml(j){
   return '<div class="dur"><b>ใช้เวลา '+fmtDur(j.doneAt-j.createdAt)+'</b><span>รับรถ '+hm(j.createdAt)+" → เสร็จ "+hm(j.doneAt)+"</span></div>";
 }
 function jobBal(j){return Math.max(0,(j.total||0)-(j.deposit||0))}
+function paidSum(j){var p=j.pay;return p?(Number(p.cash)||0)+(Number(p.scan)||0):0}
+/* จ่ายก่อนแล้วและยอดยังตรงกับยอดที่ต้องชำระ */
+function prepaidOk(j){return !!(j.pay&&j.pay.paidAt)&&paidSum(j)===jobBal(j)}
 function payDraft(j){
   var d=S.payD||(S.payD={});
   if(!d[j.id]){var pp=j.pay||{};d[j.id]={cash:{on:!!pp.cash,amt:pp.cash||0},scan:{on:!!pp.scan,amt:pp.scan||0}}}
@@ -1799,7 +1805,9 @@ function payPanel(j){
 function payDone(j){
   var p=j.pay;if(!p)return "";
   var t=[];if(p.cash)t.push("เงินสด ฿"+Number(p.cash).toLocaleString("th-TH"));if(p.scan)t.push("สแกนจ่าย ฿"+Number(p.scan).toLocaleString("th-TH"));
-  return '<div class="paid">ชำระเงินแล้ว · '+(t.join(" · ")||"-")+"</div>";
+  var pre=j.status!=="delivered",diff=jobBal(j)-paidSum(j);
+  return '<div class="paid">ชำระเงินแล้ว'+(pre?" (จ่ายก่อน)":"")+" · "+(t.join(" · ")||"-")+(pre&&p.paidAt?" · "+dstr(p.paidAt):"")+"</div>"+
+    (pre&&diff!==0?'<p class="hint" style="color:var(--danger,#b42318);font-weight:700">ยอดใบงานเปลี่ยนหลังรับเงิน '+(diff>0?"ยังขาด ฿"+diff.toLocaleString("th-TH"):"รับเกิน ฿"+(-diff).toLocaleString("th-TH"))+" กดชำระเงินเพื่อแก้ยอดตอนส่งมอบ</p>":"");
 }
 function updJob(id,patch){
   return store.updateJob(id,patch).then(function(){
@@ -1826,6 +1834,15 @@ function jobAct(id,act){
     p=updJob(id,{cond:d.cond.trim(),discount:Number(d.discount)||0,deposit:Number(d.deposit)||0,lines:lines,total:total,editedBy:by,editedAt:Date.now(),edits:log});
     S.editJob=null;S.editD=null;p.then(function(){toast("บันทึกการแก้ไขแล้ว")});
   }else
+  if(act==="prepay"&&j.status!=="delivered"&&j.status!=="done"){
+    var d0=payDraft(j),bal0=jobBal(j),sum0=paySum(d0);
+    if(sum0!==bal0){toast(sum0<bal0?"ยังรับเงินไม่ครบ เลือกเงินสดหรือสแกนจ่ายก่อน":"ยอดที่ติ๊กเกินยอดที่ต้องชำระ");return}
+    S.payOpen=null;
+    p=updJob(id,{pay:{cash:d0.cash.on?Number(d0.cash.amt)||0:0,scan:d0.scan.on?Number(d0.scan.amt)||0:0,paidAt:Date.now(),pre:true}});
+    p.then(function(){toast("บันทึกรับชำระก่อนแล้ว")});
+  }else
+  if(act==="handover"&&j.status==="done"&&prepaidOk(j)){p=updJob(id,{status:"delivered",doneAt:j.doneAt||Date.now()})}
+  else
   if(act==="next"&&j.status==="done"){
     var d=payDraft(j),bal=jobBal(j),sum=paySum(d);
     if(bal>0&&sum!==bal){toast(sum<bal?"ยังรับเงินไม่ครบ เลือกเงินสดหรือสแกนจ่ายก่อนส่งมอบ":"ยอดที่ติ๊กเกินยอดที่ต้องชำระ");return}
@@ -1841,7 +1858,7 @@ function jobAct(id,act){
     return;
   }
   if(!p&&act!=="copy"){toast("ไม่พบใบงานนี้ในระบบ ลองรีเฟรชหน้า (รหัส "+id+")");return}
-  if(p)p.then(function(){if(act==="next"||act==="back")toast("เปลี่ยนสถานะแล้ว")},function(e){var c=e&&(e.code||e.message)||"";S.lastErr=c;toast((e&&e.code==="invalid_argument"?"บัญชีนี้แก้ไขข้อมูลไม่ได้":"ทำรายการไม่สำเร็จ ลองอีกครั้ง")+(c?" ("+String(c).slice(0,60)+")":""))});
+  if(p)p.then(function(){if(act==="next"||act==="back"||act==="handover")toast("เปลี่ยนสถานะแล้ว")},function(e){var c=e&&(e.code||e.message)||"";S.lastErr=c;toast((e&&e.code==="invalid_argument"?"บัญชีนี้แก้ไขข้อมูลไม่ได้":"ทำรายการไม่สำเร็จ ลองอีกครั้ง")+(c?" ("+String(c).slice(0,60)+")":""))});
 }
 
 /* ---------- prices & size reference ---------- */
