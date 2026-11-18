@@ -1373,7 +1373,9 @@ function optRow(g,o){
 }
 function optList(g,only){
   var html='<div class="optlist">',cur=null;
-  g.opts.forEach(function(o){
+  /* ลูกค้าที่ยังอยู่ในประกัน: ให้โปรแกรมสำหรับสมาชิก (เช่น Premium) ขึ้นบนสุด */
+  var opts=S.member?g.opts.filter(function(o){return o.member}).concat(g.opts.filter(function(o){return !o.member})):g.opts;
+  opts.forEach(function(o){
     if(only&&o.sub!==only)return;
     var sk=o.sub||"";
     if(!only&&sk&&sk!==cur){cur=sk;html+='<p class="sub">'+esc(sk)+(o.note?" · "+esc(o.note):"")+"</p>"}
