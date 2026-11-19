@@ -252,6 +252,26 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom,0px));z-index:30;max-width:min(92vw,520px);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:12px;font-weight:500;opacity:0;pointer-events:none;transition:opacity .2s}
 #toast.show{opacity:1}
 @media (prefers-reduced-motion:reduce){#toast{transition:none}}
+
+/* ===== clean pass (ลดความรก ลำดับชัด ปุ่มหลักปุ่มเดียว) ===== */
+.tiles{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.tile{min-height:116px;gap:2px;padding:14px;background:var(--card);color:var(--ink);border:1.5px solid var(--line);border-radius:18px;transition:border-color .15s,box-shadow .15s}
+.tile:hover{border-color:var(--edge)}
+.tile .ic{width:auto;height:auto;background:none;border-radius:0;margin-bottom:6px}
+.tile svg{width:40px;height:40px}
+.tile svg *{stroke:currentColor}
+.tile .tt{font-size:1rem;font-weight:700}
+.tile .ts{font-size:.8rem;color:var(--muted);line-height:1.35}
+.tile .tb{margin-top:8px;background:var(--ink);color:var(--card);padding:1px 10px}
+.tile.on{outline:none;border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.tile.minor{min-height:72px;border-style:dashed}
+.ctxbar .tags .tag,#readCard .tags .tag{background:none;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:1px 10px}
+#p1 .photo-main .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#p1 #camBtn{grid-column:1/-1;min-height:56px;font-size:1.05rem;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+#p1 #camBtn svg{width:22px;height:22px}
+#p1 #stopBtn,#p1 #clearForm{grid-column:1/-1}
+#p1 #clearForm{background:none;border:0;color:var(--muted);text-decoration:underline;min-height:40px;font-weight:500}
+#sumPanel:empty{display:none}
 </style>
 
 <header class="band">
@@ -285,8 +305,8 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
         <div class="shots" id="shots"></div>
         <div class="photo-main">
           <div class="acts" style="margin-top:0">
-            <button type="button" class="btn blue" id="camBtn">ถ่ายรูปรถ / ทะเบียน</button>
-            <button type="button" class="btn blue" id="tagBtn">ถ่ายป้ายรับประกัน</button>
+            <button type="button" class="btn primary" id="camBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>ถ่ายรูปรถ / ทะเบียน</button>
+            <button type="button" class="btn ghost" id="tagBtn">ถ่ายป้ายประกัน</button>
             <button type="button" class="btn ghost" id="picBtn">เลือกรูปจากเครื่อง</button>
             <button type="button" class="btn ghost" id="stopBtn" hidden>ยกเลิก</button>
             <button type="button" class="btn ghost" id="clearForm" hidden>ล้างฟอร์มที่กรอกค้าง</button>
@@ -295,7 +315,7 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
           <input type="file" id="tagIn" accept="image/*" capture="environment" hidden>
           <input type="file" id="picIn" accept="image/*" multiple hidden>
           <input type="file" id="custPhotoIn" accept="image/*" multiple hidden>
-          <p class="hint" id="photoHint">ถ่ายให้เห็นตัวรถและป้ายทะเบียน ระบบจะอ่านยี่ห้อ รุ่น ทะเบียน สี และดึงข้อมูลลูกค้าจากประวัติให้เอง รูปไม่ถูกเก็บไว้ในระบบ</p>
+          <p class="hint" id="photoHint">ถ่ายให้เห็นตัวรถและป้ายทะเบียน ระบบจะกรอกรุ่น ทะเบียน สี และข้อมูลลูกค้าให้เอง</p>
           <p class="status" id="photoStatus" aria-live="polite"></p>
         </div>
       </div>
@@ -1250,7 +1270,7 @@ function onPhoto(files){
     /* รถที่มีประกันในระบบอยู่แล้ว ใช้ข้อมูลเดิม ไม่ต้องหาแท็กในรูปซ้ำ */
     if(S.kind==="car"&&!S.reg&&S.photos.length&&!(S.actWarr&&S.actWarr.length)){var prev=$("#photoStatus").textContent;setStatus("กำลังหาป้ายประกันในรูป...");return stickerPass().then(function(){
       if(S.reg){S.memberManual=false;lookup();setStatus("อ่านป้ายประกันได้: "+S.reg.g+(S.reg.e?" หมด "+dstr(new Date(S.reg.e+"T12:00:00").getTime()):"")+" ตรวจให้ตรงกับป้ายก่อนไปต่อ")}
-      else setStatus((prev||"")+" · ไม่พบแท็กประกันในรูป (ถ้ามีแท็ก กดถ่ายป้ายรับประกัน)")
+      else setStatus((prev||"")+" · ไม่พบแท็กประกัน")
     })}
   }).catch(photoErr).then(function(){S.photoBusy=false;S.ctl=null;S.reveal=true;S.fail=!S.okRead;renderPhoto();refresh();autoReg();
     /* ลูกค้าเดิม (มีชื่อ+เบอร์จากประวัติ) และรู้ไซส์รถแล้ว: ไปหน้าเลือกโปรแกรมเลย */
@@ -1320,7 +1340,7 @@ function applyPhoto(r){
   if(S.reg)parts.push("ป้ายรับประกัน "+S.reg.g+(S.reg.e?" หมด "+dstr(new Date(S.reg.e+"T12:00:00").getTime()):" (อ่านวันหมดอายุไม่ได้)"));
   else if(S.kind==="car"&&S.actWarr&&S.actWarr.length)parts.push("ใช้ประกันเดิมในระบบ: "+S.actWarr.map(function(a){return a.n+" ถึง "+dfmt(a.exp)}).join(", "));
   if(!parts.length){setStatus("อ่านข้อมูลจากรูปนี้ไม่ได้ ลองถ่ายให้เห็นตัวรถและป้ายชัดขึ้น หรือกรอกเองด้านล่าง",true);refresh();return}
-  setStatus("อ่านได้: "+parts.join(" · ")+(CONF[r.confidence]?" (ความมั่นใจ"+CONF[r.confidence]+")":"")+" ตรวจให้ตรงกับรถจริงก่อนไปต่อ",r.confidence==="low"||ctxMissing());
+  setStatus("อ่านได้: "+parts.join(" · ")+(r.confidence==="high"?"":(CONF[r.confidence]?" (ความมั่นใจ"+CONF[r.confidence]+")":"")+" ตรวจให้ตรงกับรถจริงก่อนไปต่อ"),r.confidence==="low"||ctxMissing());
   refresh();
 }
 function photoErr(e){
@@ -1499,7 +1519,7 @@ function renderSum(){
   var el=$("#sumPanel");
   if(S.page!==2){return}
   var ors=otherRows();
-  if(!S.lines.length&&!ors.length){el.innerHTML='<div class="sl"><span>ยังไม่ได้เลือกโปรแกรม</span><b>฿0</b></div>';return}
+  if(!S.lines.length&&!ors.length){el.innerHTML="";return}
   var t=totals();
   var rows=S.lines.map(function(l){var a=lineAmount(l);return '<div class="sl'+(a==null?" m":"")+tierCls(l.g,l.o)+'"><span>'+esc(lineName(l))+'</span><b>'+(a==null?"ใส่ราคา":baht(a))+"</b></div>"}).join("")+
     ors.map(function(r){var e=String(r.price).trim()==="";return '<div class="sl'+(e?" m":"")+'"><span>'+esc(String(r.name||"").trim()||"ค่าบริการอื่น ๆ")+'</span><b>'+(e?"ใส่ราคา":baht(Number(r.price)||0))+"</b></div>"}).join("");
@@ -1511,7 +1531,8 @@ function renderBar(){
   var t=totals();renderSum();
   $("#barTotal").textContent=baht(t.total);
   $("#balance").textContent=baht(t.balance);
-  $("#barSub").textContent=t.missing?("ยอดรวม · ยังไม่ใส่ราคา "+t.missing+" รายการ"):"ยอดรวม";
+  var nItems=S.lines.length+otherRows().length;
+  $("#barSub").textContent=t.missing?("ยังไม่ใส่ราคา "+t.missing+" รายการ"):(nItems?"ยอดรวม · "+nItems+" รายการ":"ยังไม่ได้เลือกโปรแกรม");
   $("#saveBtn").disabled=S.saving;
   var pl=$("#plate").value.trim();
   $("#b1main").textContent=(pl||"ไม่มีทะเบียน")+" · "+(S.car?S.car.label:"ยังไม่ได้เลือกรถ");
