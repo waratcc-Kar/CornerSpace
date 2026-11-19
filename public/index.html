@@ -276,6 +276,12 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
 /* คิวงาน: เลเยอร์ชัดขึ้นเล็กน้อย */
 #jobs .job{border:1px solid var(--line);box-shadow:0 1px 2px rgba(13,18,32,.06),0 6px 16px rgba(13,18,32,.07);margin-bottom:16px}
 .jthumb{border:1px solid var(--line);box-shadow:0 1px 2px rgba(13,18,32,.10),0 4px 12px rgba(13,18,32,.12)}
+
+/* ปฏิทินนัด: วันที่ผ่านแล้ว (รวมวันนี้) กดไม่ได้ */
+.cal button.past,.cal button.past.booked{opacity:1;background:var(--bg);color:var(--muted);border-style:dashed;border-color:var(--line);cursor:not-allowed}
+.cal button.past span{text-decoration:line-through;text-decoration-color:var(--line)}
+.cal button.past.booked small{color:var(--muted)}
+.cal button:not(:disabled):not(.past):not(.booked):hover{border-color:var(--ink)}
 </style>
 
 <header class="band">
@@ -2029,10 +2035,11 @@ function renderService(){
   var h=["อา","จ","อ","พ","พฤ","ศ","ส"].map(function(d){return '<div class="dow">'+d+"</div>"}).join("");
   for(var i=0;i<first;i++)h+="<div></div>";
   for(var d=1;d<=days;d++){
-    var ds=y+"-"+pad2(mo+1)+"-"+pad2(d),b=bk[ds],dt=new Date(y,mo,d),past=dt<today,cls=[];
+    /* จองได้ตั้งแต่พรุ่งนี้: วันนี้และวันที่ผ่านไปแล้วกดไม่ได้ */
+    var ds=y+"-"+pad2(mo+1)+"-"+pad2(d),b=bk[ds],dt=new Date(y,mo,d),past=dt<=today,cls=[];
     var can=S.bookFor&&!b&&!past;
-    if(b)cls.push("booked");if(can)cls.push("pick");if(dt.getTime()===today.getTime())cls.push("today");
-    h+='<button type="button" class="'+cls.join(" ")+'" data-d="'+ds+'"'+(can?"":" disabled")+'><span>'+d+"</span>"+(b?"<small>"+esc(b.plate||b.name||"")+"</small>":"")+"</button>";
+    if(b)cls.push("booked");if(can)cls.push("pick");if(past)cls.push("past");if(dt.getTime()===today.getTime())cls.push("today");
+    h+='<button type="button" class="'+cls.join(" ")+'" data-d="'+ds+'"'+(past||b?" disabled":"")+'><span>'+d+"</span>"+(b?"<small>"+esc(b.plate||b.name||"")+"</small>":"")+"</button>";
   }
   $("#cal").innerHTML=h;
   var who=S.bookFor&&S.customers.filter(function(c){return c.id===S.bookFor})[0];
@@ -2079,7 +2086,8 @@ function svcAct(btn){
   }
 }
 function bookDay(ds){
-  var m=S.customers.filter(function(c){return c.id===S.bookFor})[0];if(!m)return;
+  var m=S.customers.filter(function(c){return c.id===S.bookFor})[0];if(!m){toast("กด \"จองวัน\" ที่ลูกค้าด้านล่างก่อน แล้วค่อยเลือกวัน");return}
+  var t0=new Date();t0.setHours(0,0,0,0);if(new Date(ds+"T00:00:00")<=t0){toast("จองได้ตั้งแต่พรุ่งนี้เป็นต้นไป");return}
   var mi=S.svcY*12+S.svcM,e=dueFor(mi).filter(function(x){return x.m.id===m.id})[0];
   if(!e){toast("ลูกค้ารายนี้ไม่ถึงรอบบริการในเดือนนี้");return}
   var b={date:ds,cid:m.id,plate:m.plate||"",name:m.n||"",phone:m.p||"",car:m.c||"",prog:e.its.map(function(i){return i.name}).join(", "),createdAt:Date.now()};
@@ -2124,8 +2132,8 @@ function renderBook(){
   var g=["อา","จ","อ","พ","พฤ","ศ","ส"].map(function(d){return '<div class="dow">'+d+"</div>"}).join("");
   for(var i=0;i<first;i++)g+="<div></div>";
   for(var d=1;d<=days;d++){
-    var ds=y+"-"+pad2(mo+1)+"-"+pad2(d),past=new Date(y,mo,d)<today,tk=taken[ds],ok=!own&&!past&&!tk;
-    g+='<button type="button" class="'+(B.pick===ds?"pick":"")+(tk?" booked":"")+'" data-d="'+ds+'"'+(ok?"":" disabled")+"><span>"+d+"</span>"+(tk?"<small>เต็ม</small>":"")+"</button>";
+    var ds=y+"-"+pad2(mo+1)+"-"+pad2(d),past=new Date(y,mo,d)<=today,tk=taken[ds],ok=!own&&!past&&!tk;
+    g+='<button type="button" class="'+(B.pick===ds?"pick":"")+(tk?" booked":"")+(past?" past":"")+'" data-d="'+ds+'"'+(ok?"":" disabled")+"><span>"+d+"</span>"+(tk?"<small>เต็ม</small>":"")+"</button>";
   }
   h+='<div class="cal">'+g+"</div>";
   if(B.pick&&!own)h+='<div class="acts"><button type="button" class="btn primary" id="bkConfirm">ยืนยันจองวันที่ '+dstr(new Date(B.pick+"T12:00:00").getTime())+"</button></div>";
