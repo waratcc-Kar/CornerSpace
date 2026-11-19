@@ -273,19 +273,8 @@ td .in{min-height:38px;padding:4px 8px;text-align:right;min-width:78px}
 #p1 #clearForm{background:none;border:0;color:var(--muted);text-decoration:underline;min-height:40px;font-weight:500}
 #sumPanel:empty{display:none}
 
-/* คิวงาน: แยกแต่ละคันให้ชัด */
-#jobs .qcard{border:1.5px solid var(--line);border-top:6px solid var(--line);box-shadow:0 4px 14px rgba(13,18,32,.08);margin-bottom:24px;border-radius:18px}
-#jobs .qcard.st-working{border-top-color:var(--yellow)}
-#jobs .qcard.st-queue{border-top-color:var(--edge)}
-#jobs .qcard.st-done{border-top-color:#1f9d55}
-#jobs .qcard.st-delivered{border-top-color:var(--line)}
-#jobs .qcard .jno{display:flex;align-items:center;gap:8px}
-#jobs .qcard .qn{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 6px;border-radius:999px;background:var(--ink);color:var(--card);font-weight:700;font-size:.85rem}
-#jobs .qcard .acts{flex-wrap:wrap;gap:8px}
-#jobs .qcard .acts .btn{white-space:nowrap;padding-inline:14px}
-#jobs .qcard .qcust{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 0}
-#jobs .qcard .qcall{flex:none;display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0!important;border-radius:999px}
-#jobs .qcard .qcall svg{width:20px;height:20px}
+/* คิวงาน: เลเยอร์ชัดขึ้นเล็กน้อย */
+#jobs .job{border:1px solid var(--line);box-shadow:0 1px 2px rgba(13,18,32,.06),0 6px 16px rgba(13,18,32,.07);margin-bottom:16px}
 </style>
 
 <header class="band">
@@ -1752,15 +1741,15 @@ function renderQueue(){
   var srcEl=$("#qsrc");if(srcEl)srcEl.textContent=(store.mode==="db"?"ข้อมูลจากฐานข้อมูลกลาง":"ข้อมูลเก็บเฉพาะเครื่องนี้")+" · "+S.jobs.length+" ใบ";
   if(!list.length){
     box.innerHTML='<p class="empty">'+(S.loaded?(S.jobs.length?"ไม่มีงานในสถานะนี้":"ยังไม่มีใบรับรถ กดแท็บ “รับรถ” เพื่อเปิดใบแรก"):(S.slow?"ยังเชื่อมต่อข้อมูลไม่ได้ ข้อมูลอาจไม่เป็นปัจจุบัน"+(S.err?" ("+esc(String(S.err))+")":""):"กำลังโหลดคิวงาน..."))+"</p>";return}
-  box.innerHTML=list.map(function(j,qi){
+  box.innerHTML=list.map(function(j){
     var si=0;STATUS.forEach(function(s,k){if(s[0]===j.status)si=k});
     var st=STATUS[si];
     var d=new Date(j.createdAt);
     var warn="";
-    return '<article class="job qcard st-'+esc(j.status)+'" data-id="'+esc(j.id)+'" aria-label="คันที่ '+(qi+1)+'"><div class="jh"><div><div class="jno"><span class="qn" aria-hidden="true">'+(qi+1)+"</span>"+esc(j.no)+" · "+dstr(j.createdAt)+" "+d.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+
+    return '<article class="job" data-id="'+esc(j.id)+'"><div class="jh"><div><div class="jno">'+esc(j.no)+" · "+dstr(j.createdAt)+" "+d.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+
       '</div><div class="carname">'+esc(j.car)+(j.color?" <small>"+esc(j.color)+"</small>":"")+'</div><span class="pill '+j.status+'">'+st[1]+'</span></div><div class="jr2">'+(j.thumb?'<img class="jthumb" src="'+j.thumb+'" alt="รูปรถ '+esc(j.plate)+'">':"")+'<div class="lp" aria-label="ทะเบียน"><b>'+esc(j.plate)+"</b>"+(j.prov?"<small>"+esc(j.prov)+"</small>":"")+"</div></div></div>"+
       '<div class="tags">'+jobTags(j)+(j.member?'<span class="tag member">สมาชิก</span>':"")+"</div>"+
-      (j.name||j.phone?'<div class="qcust"><span>'+esc(j.name)+" "+esc(j.phone)+"</span>"+(digits(j.phone).length>=9?'<a class="btn blue sm qcall" href="tel:'+digits(j.phone)+'" aria-label="โทรหาลูกค้า"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z"/></svg></a>':"")+"</div>":"")+
+      (j.name||j.phone?"<div>"+esc(j.name)+" "+esc(j.phone)+"</div>":"")+
       '<ul class="jl">'+j.lines.map(function(l){return '<li class="'+tierCls(l.g,l.o).trim()+'"><span>'+esc(l.name)+(l.note?"<small>"+esc(l.note)+"</small>":"")+"</span><span>"+baht(l.price)+"</span></li>"}).join("")+"</ul>"+
       (j.shots&&Object.keys(j.shots).length?'<div class="cthumbs">'+Object.keys(j.shots).map(function(k){return '<img src="'+j.shots[k]+'" alt="รูป'+esc(k)+'" title="'+esc(k)+'">'}).join("")+"</div>":"")+
       (j.checks&&j.checks.length||j.cond?'<p class="hint">รายละเอียด: '+esc((j.checks||[]).join(", "))+(j.checks&&j.checks.length&&j.cond?" · ":"")+(j.cond?esc(j.cond):"")+"</p>":"")+warn+
@@ -1775,7 +1764,7 @@ function renderQueue(){
       :j.status==="done"?(prepaidOk(j)?'<button class="btn primary sm" data-act="handover">ส่งมอบรถ</button>':'<button class="btn primary sm" data-act="payopen">ชำระเงิน</button>')
       :(st[2]?'<button class="btn primary sm" data-act="next">'+st[2]+"</button>":"")+(j.status!=="delivered"&&!(j.pay&&j.pay.paidAt)?'<button class="btn ghost sm" data-act="payopen">รับชำระก่อน</button>':""))+
       (j.status!=="delivered"&&S.editJob!==j.id?'<button class="btn ghost sm" data-act="edit">แก้ไข</button>':"")+
-      ""+'</div>'+
+      (digits(j.phone).length>=9?'<a class="btn blue sm" href="tel:'+digits(j.phone)+'" aria-label="โทรหาลูกค้า">โทรหาลูกค้า</a>':"")+'</div>'+
       (S.showText===j.id?'<textarea class="in copybox" readonly>'+esc(lineSummary(j))+"</textarea>":"")+"</article>";
   }).join("");
   if(S.showText){var ta=$(".copybox");if(ta){ta.focus();ta.select()}}
