@@ -5,7 +5,26 @@
    - /api/line/push, /line-webhook : ส่ง/รับข้อความ LINE OA
    - scheduled   : ทุกวัน 09:00 เวลาไทย เตือนลูกค้าที่นัดบริการพรุ่งนี้ */
 
-import { KB } from "./knowledge.js";
+import { KB as KB_STATIC } from "./knowledge.js";
+import "../public/tintmap.js";
+
+/* ฟิล์มกรองแสง: ไซส์และราคาชุดเดียวกับเว็บ FilmPro (แคช 10 นาที ถ้าดึงไม่ได้ใช้ชุดที่ฝังไว้) */
+const FILMPRO_CATALOG = "https://film.karnet.org/api/catalog";
+let tintCache = { at: 0, cat: null, kb: null };
+async function tintCatalog(env) {
+  if (tintCache.cat && Date.now() - tintCache.at < 600000) return tintCache.cat;
+  try {
+    const r = env && env.FILMPRO ? await env.FILMPRO.fetch(FILMPRO_CATALOG) : await fetch(FILMPRO_CATALOG, { cf: { cacheTtl: 300 } });
+    if (r.ok) { const cat = await r.json(); if (cat && cat.brands) tintCache = { at: Date.now(), cat, kb: null }; }
+  } catch (e) { /* ใช้ชุดเดิม */ }
+  return tintCache.cat;
+}
+async function kbNow(env) {
+  const cat = await tintCatalog(env);
+  if (!cat) return KB_STATIC;
+  if (!tintCache.kb) { try { tintCache.kb = globalThis.TintMap.kb(KB_STATIC, cat); } catch (e) { tintCache.kb = KB_STATIC; } }
+  return tintCache.kb;
+}
 
 const COLLS = new Set(["jobs", "customers", "bookings", "settings"]);
 const LIMITS = { jobs: 500, customers: 2000, bookings: 1000, settings: 20 };
@@ -193,6 +212,10 @@ async function api(req, env, url) {
     return json({ ok: true, richMenuId: id });
   }
   if (parts[0] === "me" && m === "GET") return json({ email: u.email, owner: u.owner });
+  if (parts[0] === "tint-catalog" && m === "GET") {
+    const cat = await tintCatalog(env);
+    return cat ? json(cat) : fail(502, "catalog_unavailable", "ดึงราคาฟิล์มจากเว็บ FilmPro ไม่ได้");
+  }
 
   if (parts[0] === "sync" && m === "GET") {
     const since = Math.max(0, Number(url.searchParams.get("since")) || 0);
@@ -406,7 +429,7 @@ async function makeDraft(env, uid, img) {
         model: env.CHAT_MODEL || env.MODEL || DEFAULT_MODEL,
         max_tokens: 4000,
         ...(useSearch ? { tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }] } : {}),
-        system: [{ type: "text", text: KB, cache_control: { type: "ephemeral" } }, { type: "text", text: "ตอนนี้: " + thaiNow() }],
+        system: [{ type: "text", text: await kbNow(env), cache_control: { type: "ephemeral" } }, { type: "text", text: "ตอนนี้: " + thaiNow() }],
         messages: build(attempt ? "\nสำคัญ: ผลลัพธ์ต้องเป็น JSON ที่มีคีย์ reply, needs_staff, reason เท่านั้น เริ่มด้วย { และจบด้วย }" : "")
       })
     }); } catch (e) { lastErr = ("fetch " + (e && e.message)).slice(0, 200); break; }
@@ -717,7 +740,7 @@ async function pubAsk(req, env) {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({ model: env.CHAT_MODEL || env.MODEL || DEFAULT_MODEL, max_tokens: 2000,
-        system: [{ type: "text", text: KB, cache_control: { type: "ephemeral" } }, { type: "text", text: "ตอนนี้: " + thaiNow() }], messages })
+        system: [{ type: "text", text: await kbNow(env), cache_control: { type: "ephemeral" } }, { type: "text", text: "ตอนนี้: " + thaiNow() }], messages })
     }); } catch (e) { break; }
     if (!r.ok) break;
     const out = await r.json();

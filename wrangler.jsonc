@@ -11,6 +11,8 @@
       "database_id": "39354141-c9bd-4746-9f83-fa81023667ba"
     }
   ],
+  // ราคา/ไซส์ฟิล์มกรองแสงจากเว็บ FilmPro (worker filmpro)
+  "services": [{ "binding": "FILMPRO", "service": "filmpro" }],
   // เตือนนัดบริการ: 02:00 UTC = 09:00 เวลาไทย
   "triggers": { "crons": ["0 2 * * *"] }
 }
