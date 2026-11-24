@@ -898,7 +898,8 @@ function renderPage(){
   }
   $("#p1").hidden=S.page!==1;$("#p2").hidden=S.page!==2;
   $("#bar1").hidden=S.page!==1;$("#bar2").hidden=S.page!==2;
-  ["plate","prov","color","cname","phone","member","ncName","ncPhone"].forEach(function(i){var e=$("#"+i);if(e)e.disabled=!!S.editJobId});
+  /* แก้ไขใบงาน: ทะเบียน/จังหวัด/สมาชิกล็อกไว้ แต่แก้ชื่อ เบอร์ สีรถได้ */
+  ["plate","prov","member"].forEach(function(i){var e=$("#"+i);if(e)e.disabled=!!S.editJobId});
   $$("#kind button").forEach(function(b){b.disabled=!!S.editJobId});
   var eb=$("#editBanner");eb.hidden=!S.editJobId;
   var ejd=S.editJobId&&S.jobs.filter(function(x){return x.id===S.editJobId})[0];$("#editUndoDone").hidden=!(ejd&&ejd.status==="done");
@@ -1624,6 +1625,11 @@ function saveJob(){
   if(S.editJobId){
     var cur=S.jobs.filter(function(x){return x.id===S.editJobId})[0];
     if(!cur||cur.status==="delivered"){toast("ชำระเงินแล้ว แก้ไขรายการไม่ได้");return}
+    var phE=$("#phone").value.trim();if(digits(phE).length<9){toast(digits(phE).length?"เบอร์โทรไม่ครบ ตรวจอีกครั้ง":"ใส่เบอร์โทรลูกค้าก่อน (ชื่อไม่บังคับ)");return}
+    var nmE=$("#cname").value.trim(),colE=$("#color").value.trim();
+    /* อัปเดตข้อมูลลูกค้าในระบบให้ตรงกับที่แก้ (หาจากทะเบียนเดิมของใบงาน) */
+    try{var plE=norm(cur.plate||""),mcE=plE&&S.customers.filter(function(m){return m.plate&&norm(m.plate)===plE})[0];
+      if(mcE&&((nmE&&nmE!==mcE.n)||phE!==mcE.p))store.saveCustomer(Object.assign({},mcE,{n:nmE||mcE.n,p:phE})).catch(function(){})}catch(x){}
     var by=myId(),now2={};S.lines.forEach(function(l){now2[l.g+"|"+l.o]=lineName(l)});
     var rem=Object.keys(S.editKeys).filter(function(k){return !now2[k]}).map(function(k){return S.editNames[k]||k});
     var add=Object.keys(now2).filter(function(k){return !S.editKeys[k]}).map(function(k){return now2[k]});
@@ -1633,7 +1639,7 @@ function saveJob(){
     var moto0=S.kind==="moto";
     var patch={shots:Object.assign({},S.cshots||{}),checks:S.checks.slice(),confirms:S.confirms.slice(),cond:$("#cond").value.trim(),
       lines:S.lines.map(function(l){return {g:l.g,o:l.o,name:lineName(l),note:l.note.trim(),price:lineAmount(l),sun:l.sun||0,pn:l.pn||null,wy:isWarr(l)?wyOf(l):0}}).concat(otherLines()),
-      discount:Number($("#discount").value)||0,deposit:Number($("#deposit").value)||0,total:t.total,editedBy:by,editedAt:Date.now(),edits:log};
+      name:nmE,phone:phE,color:colE,discount:Number($("#discount").value)||0,deposit:Number($("#deposit").value)||0,total:t.total,editedBy:by,editedAt:Date.now(),edits:log};
     if(S.owner)Object.assign(patch,{car:S.car.label,wash:moto0?null:S.ctx.wash,tint:moto0?null:S.ctx.tint,ppf:moto0?null:S.ctx.ppf,pk:moto0?false:!!S.ctx.pk,cc:moto0?S.ctx.cc:null});
     S.saving=true;renderBar();
     updJob(S.editJobId,patch).then(function(){toast("บันทึกการแก้ไขแล้ว");resetForm();setTab("queue")}).catch(function(e){
